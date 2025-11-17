@@ -35,7 +35,6 @@ setup(
     },
     install_requires=[
         'numpy>=1.19',
-        'tornado>=6.0',
         'munkres>=1.1',
         'networkx>=2.5',
     ],
