@@ -23,22 +23,37 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 
 
 	# filemap is in the format: run_id\tK_value\trel/path/to/qmatrix
+	# Parse manually for better compatibility with numpy 2.x
+	qfiles_info = []
 	try:
-		with warnings.catch_warnings():
-			warnings.simplefilter("ignore")
-			# note that np.genfromtxt has a default value of comments='#'
-			# In Python 3, genfromtxt already returns strings, not bytes
-			# Converters are only needed to ensure strings (not bytes) in Python 2 compatibility
-			qfiles_info = np.genfromtxt(filemap, delimiter='\t', 
-				dtype=[('f0', object), ('f1', int), ('f2', object)],
-				converters={0: lambda s: s.decode('utf-8') if isinstance(s, bytes) else str(s), 
-				           2: lambda s: s.decode('utf-8') if isinstance(s, bytes) else str(s)},
-				loose=False, autostrip=True)
-	except ValueError:
-		sys.exit('Error parsing filemap: check that the file is tab-'
-			'delimited, that the columns are ordered properly, and that the \'#\' character '
-			'is not used other than to indicate the start of a comment (i.e. it cannot '
-			'be used as part of a runID).')
+		with open(filemap, 'r', encoding='utf-8') as f:
+			for line_num, line in enumerate(f, 1):
+				line = line.strip()
+				# Skip empty lines and comments
+				if not line or line.startswith('#'):
+					continue
+				# Split by tab
+				parts = line.split('\t')
+				if len(parts) < 3:
+					sys.exit(f'Error parsing filemap at line {line_num}: expected 3 tab-delimited columns '
+						f'(run_id, K_value, filepath), but found {len(parts)} columns.\n'
+						f'Line: {line}')
+				run_id = parts[0].strip()
+				try:
+					K_value = int(parts[1].strip())
+				except ValueError:
+					sys.exit(f'Error parsing filemap at line {line_num}: K_value must be an integer.\n'
+						f'Line: {line}')
+				filepath = parts[2].strip()
+				qfiles_info.append((run_id, K_value, filepath))
+	except IOError as e:
+		sys.exit(f'Error reading filemap: {str(e)}')
+	
+	if len(qfiles_info) == 0:
+		sys.exit('Error: filemap is empty or contains no valid entries.')
+	
+	# Convert to numpy structured array for compatibility with rest of code
+	qfiles_info = np.array(qfiles_info, dtype=[('f0', object), ('f1', int), ('f2', object)])
 
 
 	if (qfiles_info.size < 1):
@@ -82,7 +97,14 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 
 	# Decode string escapes in col delim (e.g. convert unicode escaped tab to string tab)
 	# This prevents numpy from interpreting user-input tab as literally backslash t
-	if col_delim: col_delim = col_delim.decode("string_escape")
+	# Python 3 compatible version
+	if col_delim:
+		# Handle escape sequences like \t, \n, etc.
+		try:
+			col_delim = col_delim.encode().decode('unicode_escape')
+		except (AttributeError, UnicodeDecodeError):
+			# If already decoded or not a string, use as is
+			pass
 
 	fp_rel = path.split(filemap)[0] 
 	n = set() # make sure all Q matrices have the same number of individuals
@@ -92,7 +114,8 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 
 		#read Q matrix information into array
 		try:
-			data = np.genfromtxt(p, loose=False, unpack=True, delimiter=col_delim,
+			# loose parameter was removed in numpy 2.x
+			data = np.genfromtxt(p, unpack=True, delimiter=col_delim,
 				autostrip=True, usecols=list(range(ignore_cols, ignore_cols+q[1])))
 			if (q[1] == 1):
 				data = [data]
@@ -167,7 +190,8 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 	
 	if not labels_file:
 		pops = set(pong.ind2pop)
-		pong.pop_order = [x[1] for x in sorted([(np.where(ind2pop==p)[0], p) for p in pops])]
+		# np.where returns a tuple in numpy 2.x, need to handle it properly
+		pong.pop_order = [x[1] for x in sorted([(np.where(pong.ind2pop==p)[0], p) for p in pops])]
 		pong.popcode2popname = {p:p for p in pops}
 	
 	else:

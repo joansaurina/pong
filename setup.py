@@ -34,7 +34,7 @@ setup(
         ],
     },
     install_requires=[
-        'numpy>=1.19',
+        'numpy>=1.19,<3.0',
         'munkres>=1.1',
         'networkx>=2.5',
     ],
