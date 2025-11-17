@@ -1,0 +1,8 @@
+include VERSION
+include README.md
+recursive-include templates *.html
+recursive-include static *
+recursive-include license *.txt
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+
