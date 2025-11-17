@@ -13,9 +13,6 @@ import argparse
 import time
 import json
 from shutil import rmtree
-import tornado.ioloop
-import tornado.web
-import tornado.websocket
 import munkres # not used here, just checking version
 import networkx as nx # not used here, just checking version
 
@@ -115,11 +112,6 @@ def main():
 		default='jaccard', help='distance metric to be used for comparing '
 		'cluster similarities. Choose from %s. Default = jaccard' 
 		% str(dist_metrics))
-	parser.add_argument('--disable_server', default=False, action='store_true',
-		help='run pong\'s algorithm without initializing a server instance or '
-		'visualizing results.')
-	parser.add_argument('-p', '--port', type=int, default=4000,
-		help='Specify port on which the server should locally host. Default = 4000.')
 	parser.add_argument('-v', '--verbose', default=False,
 		action='store_true', help='Report more details about clustering '
 		'results to the command line, and print all cluster distances in the '
@@ -137,30 +129,34 @@ def main():
 	if sys.version_info.major != 3:
 		sys.exit('Error: You are running Python %d; pong requires version 3.' % sys.version_info.major)
 	
+	# Check dependency versions - using flexible version checking
 	fmt_v = lambda module: module.__version__.split('.')
-	deps = True # dependencies are good
-	deps = deps and sys.version_info.minor >= 6 # python 3.7 or higher
-	deps = deps and int(fmt_v(np)[0]) == 1 # numpy v1
-	deps = deps and int(fmt_v(np)[1]) >= 19 # 1.19 or higher
-	deps = deps and int(fmt_v(munkres)[0]) == 1 # munkres v1
-	deps = deps and int(fmt_v(munkres)[1]) >= 1 # 1.1 or higher
-	deps = deps and int(fmt_v(nx)[0]) == 2 # networkx v2
-	deps = deps and int(fmt_v(nx)[1]) >= 5 # 2.5 or higher
-	deps = deps and int(tornado.version_info[0]) == 6 # tornado v6
-
-	if not deps:
-		sys.stdout.write(f'Warning: pong expects the following dependencies:\n'
-			f' - python >= 3.7 (installed: v3.{sys.version_info.minor}),\n'
-			f' - numpy >= 1.18 (installed: {np.__version__}),\n'
-			f' - munkres >= 1.1 (installed: {munkres.__version__}),\n'
-			f' - networkx >= 2.4 (installed: {nx.__version__}),\n'
-			f' - tornado >= 6 (installed: {tornado.version}).\n'
-			f'We recommend upgrading these modules, otherwise you may\n'
-			f'experience issues running pong.\n')
-		r = input('Continue anyway? (y/n): ')
-		while r not in ('y', 'Y', 'n', 'N'):
-			r = input('Please enter "y" to overwrite or "n" to exit: ')
-		if r in ('n', 'N'): sys.exit(1)
+	
+	# Check Python version (3.7+)
+	if sys.version_info.major != 3 or sys.version_info.minor < 7:
+		sys.exit(f'Error: pong requires Python 3.7 or higher. You are running Python {sys.version_info.major}.{sys.version_info.minor}')
+	
+	# Check numpy version (1.19+ or 2.0+) - flexible for both major versions
+	np_major = int(fmt_v(np)[0])
+	np_minor = int(fmt_v(np)[1]) if len(fmt_v(np)) > 1 else 0
+	if np_major == 1 and np_minor < 19:
+		sys.stdout.write(f'Warning: pong expects numpy >= 1.19 or >= 2.0, but you have {np.__version__}. '
+			f'Some features may not work correctly.\n')
+	# numpy 2.x is also supported, no warning needed
+	
+	# Check munkres version (1.1+) - current version 1.1.4 is fine
+	munkres_major = int(fmt_v(munkres)[0])
+	munkres_minor = int(fmt_v(munkres)[1]) if len(fmt_v(munkres)) > 1 else 0
+	if munkres_major < 1 or (munkres_major == 1 and munkres_minor < 1):
+		sys.stdout.write(f'Warning: pong expects munkres >= 1.1, but you have {munkres.__version__}. '
+			f'Some features may not work correctly.\n')
+	
+	# Check networkx version (2.5+) - current version 2.8.8 is fine
+	nx_major = int(fmt_v(nx)[0])
+	nx_minor = int(fmt_v(nx)[1]) if len(fmt_v(nx)) > 1 else 0
+	if nx_major < 2 or (nx_major == 2 and nx_minor < 5):
+		sys.stdout.write(f'Warning: pong expects networkx >= 2.5, but you have {nx.__version__}. '
+			f'Some features may not work correctly.\n')
 
 
 	# Check validity of pongparams file
@@ -271,24 +267,6 @@ def main():
 	# ========================= RUN PONG ======================================
 
 	print(pongdata.intro)
-
-
-	# Code for running pong from the tornado app
-	# if opts.disable_server:
-	# 	run_pong(*run_pong_args)
-	# else:
-	# 	app = Application()
-	# 	app.listen(opts.port)
-
-	# 	msg = 'pong server is now running locally & listening on port %s\n' % opts.port
-	# 	msg += 'Open your web browser and navigate to localhost:%s to see the visualization\n\n'% opts.port
-	# 	sys.stdout.write(msg)
-		
-	# 	try:
-	# 		tornado.ioloop.IOLoop.current().start()
-	# 	except KeyboardInterrupt:
-	# 		sys.stdout.write('\n')
-	# 		sys.exit(0)
 
 
 	run_pong(*run_pong_args)
@@ -553,79 +531,6 @@ def run_pong(pongdata, opts, pong_filemap, labels, ind2pop):
 
 
 
-class Application(tornado.web.Application):
-	def __init__(self):
-		handlers = [
-			(r"/", MainHandler),
-			(r"/pongsocket", WSHandler),
-		]
-		src = path.dirname(__file__) # if version == 'DEV' else pong.__path__[0]
-		settings = dict(
-			template_path=path.join(src, "templates"),
-			static_path=path.join(src, "static"),
-		)
-		tornado.web.Application.__init__(self, handlers, **settings)
-
-
-class MainHandler(tornado.web.RequestHandler):
-	def get(self):
-		self.render("pong.html")
-
-class WSHandler(tornado.websocket.WebSocketHandler):
-	global pongdata
-	clients = set()
-
-	def open(self):
-		WSHandler.clients.add(self)
-		
-		# Code for running pong from the tornado app
-		# Server is not asynchronous so it won't serve a partially-completed Pong object
-		# if pongdata.status == 0:
-			# global run_pong_args
-			# run_pong(*run_pong_args)
-		
-		print('New browser connection; generating visualization')
-		pong_json_data = write.write_json(pongdata) # add 'True' when debugging to get json
-
-		self.write_message(json.dumps({'type': 'pong-data',
-			'pong': pong_json_data},))
-
-
-
-	def on_close(self):
-		WSHandler.clients.remove(self)
-		print('Browser disconnected')
-
-	# @classmethod
-	# def update(cls, data):
-	#	 for client in cls.clients:
-	#		 client.write_message(data)
-
-	def on_message(self, message):
-		# logging.info("received message")
-
-		data = json.loads(message)
-		data = tornado.escape.json_decode(message)
-
-		#received call from client on_message getQmatrix function call
-		if data['type'] == 'get-qmatrix':
-			name = data['name']
-			run = pongdata.runs[pongdata.name2id[name]] #returns run instance
-			minor = data['minor']
-			minorID = data['minorID']
-			is_first = data['is_first']
-
-			# print 'server received request for Q-matrix %s. Column perm %s.' % (name, str(run.alignment-1))
-
-			if minor=='yes':
-				response = {'type':'q-matrix', 'name':name, 'K':run.K,'matrix2d':run.population_object_data, 'minor':'yes', 'minorID':minorID, 'is_first':is_first}
-			else:
-				response = {'type':'q-matrix', 'name':name, 'K':run.K, 'matrix2d':run.population_object_data, 'minor':'no', 'minorID': None, 'is_first':None}
-
-			self.write_message(json.dumps(response))
-
-		else:
-			sys.exit('Error: Received invalid socket message from client')
 
 
 

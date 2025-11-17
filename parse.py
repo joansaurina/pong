@@ -27,9 +27,12 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 		with warnings.catch_warnings():
 			warnings.simplefilter("ignore")
 			# note that np.genfromtxt has a default value of comments='#'
+			# In Python 3, genfromtxt already returns strings, not bytes
+			# Converters are only needed to ensure strings (not bytes) in Python 2 compatibility
 			qfiles_info = np.genfromtxt(filemap, delimiter='\t', 
 				dtype=[('f0', object), ('f1', int), ('f2', object)],
-				converters={0: lambda s: s.decode(), 2: lambda s: s.decode()},
+				converters={0: lambda s: s.decode('utf-8') if isinstance(s, bytes) else str(s), 
+				           2: lambda s: s.decode('utf-8') if isinstance(s, bytes) else str(s)},
 				loose=False, autostrip=True)
 	except ValueError:
 		sys.exit('Error parsing filemap: check that the file is tab-'

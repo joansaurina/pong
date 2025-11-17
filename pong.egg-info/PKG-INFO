@@ -17,7 +17,6 @@ Classifier: License :: OSI Approved :: MIT License
 Requires-Python: >=3.7
 Description-Content-Type: text/markdown
 Requires-Dist: numpy>=1.19
-Requires-Dist: tornado>=6.0
 Requires-Dist: munkres>=1.1
 Requires-Dist: networkx>=2.5
 
