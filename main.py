@@ -16,10 +16,16 @@ from shutil import rmtree
 import munkres # not used here, just checking version
 import networkx as nx # not used here, just checking version
 
+# Import matplotlib and set backend to 'Agg' for non-GUI environments
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+
 #pylint: enable=import-error
 
 with open(path.join(path.dirname(__file__), 'VERSION')) as f:
-	version = f.read().strip()
+    version = f.read().strip()
 
 year = 2021
 sys.path.insert(0, path.dirname(__file__))
@@ -31,40 +37,40 @@ pongdata = None
 run_pong_args = None
 
 class Pongdata:
-	def __init__(self, intro, outputdir, printall):
-		self.runs = {} # contains all Run objects
-		self.all_kgroups = [] # contains kgroups in order
-		self.cluster_matches = {} # all clustering solutions matching 2 runs
+    def __init__(self, intro, outputdir, printall):
+        self.runs = {} # contains all Run objects
+        self.all_kgroups = [] # contains kgroups in order
+        self.cluster_matches = {} # all clustering solutions matching 2 runs
 
-		self.name2id = {} # run name to run ID
+        self.name2id = {} # run name to run ID
 
 
-		self.num_indiv = -1
-		self.K_min = -1
-		self.K_max = -1
+        self.num_indiv = -1
+        self.K_min = -1
+        self.K_max = -1
 
-		self.intro = intro
-		self.output_dir = outputdir
-		self.print_all = printall
+        self.intro = intro
+        self.output_dir = outputdir
+        self.print_all = printall
 
-		self.ind2pop = None
-		self.pop_order = None
-		self.popcode2popname = None
-		self.popindex2popname = None
-		self.pop_sizes = None
-		self.sort_by = None
-		self.indiv_avg = None
+        self.ind2pop = None
+        self.pop_order = None
+        self.popcode2popname = None
+        self.popindex2popname = None
+        self.pop_sizes = None
+        self.sort_by = None
+        self.indiv_avg = None
 
-		self.colors = [] # use custom colors?
+        self.colors = [] # use custom colors?
 
-		# status attr is only necessary if pong is run from within the server
-		# self.status = 0 # incomplete, working, or complete (0,1,2)
+        # status attr is only necessary if pong is run from within the server
+        # self.status = 0 # incomplete, working, or complete (0,1,2)
 
 intro = '\n'
 intro += '-------------------------------------------------------------------\n'
-intro += '                            p o n g\n'
-intro += '      by A. Behr, K. Liu, T. Devlin, G. Liu-Fang, and S. Ramachandran\n'
-intro += '                       Version %s (%d)\n' % (version, year)
+intro += '                             p o n g\n'
+intro += '   by A. Behr, K. Liu, T. Devlin, G. Liu-Fang, and S. Ramachandran\n'
+intro += '                         Version %s (%d)\n' % (version, year)
 intro += '-------------------------------------------------------------------\n'
 intro += '-------------------------------------------------------------------\n'
 
@@ -74,467 +80,501 @@ intro += '-------------------------------------------------------------------\n'
 
 
 def main():
-	dist_metrics = ['sum_squared', 'percent', 'G', 'jaccard']
-	
-	parser = argparse.ArgumentParser(description='-------------------------------- '
-		'pong, v%s --------------------------------' % version)
+    dist_metrics = ['sum_squared', 'percent', 'G', 'jaccard']
+    
+    parser = argparse.ArgumentParser(description='-------------------------------- '
+        'pong, v%s --------------------------------' % version)
 
-	parser.add_argument('-m', '--filemap', required=True,
-		help='path to params file containing information about input '
-		'Q-matrix files')
-	parser.add_argument('-c', '--ignore_cols', type=int, default = 0,
-		help='ignore the first i columns of every data line. Typically 5 for '
-		'Structure output and 0 for ADMIXTURE output. Default = 0')
-	parser.add_argument('-o', '--output_dir', default=None, # gets set later
-		help='specify output dir for files to be '
-		'written to. By default, pong makes a folder named "pong_output_datetime" in '
-		'the current working directory, where "datetime" is the current system date and time.')
+    parser.add_argument('-m', '--filemap', required=True,
+        help='path to params file containing information about input '
+        'Q-matrix files')
+    parser.add_argument('-c', '--ignore_cols', type=int, default = 0,
+        help='ignore the first i columns of every data line. Typically 5 for '
+        'Structure output and 0 for ADMIXTURE output. Default = 0')
+    parser.add_argument('-o', '--output_dir', default=None, # gets set later
+        help='specify output dir for files to be '
+        'written to. By default, pong makes a folder named "pong_output_datetime" in '
+        'the current working directory, where "datetime" is the current system date and time.')
 
-	parser.add_argument('-i', '--ind2pop', default=None,
-		help='ind2pop data (can be either a Q-matrix column number or the ' 
-		'path to a file containing the data).')
-	parser.add_argument('-n', '--pop_names', default=None,
-		help='Path to file containing population order/names.')
-	parser.add_argument('-l', '--color_list',
-		help='List of colors to be used for visualization. If this file is not '
-		'included, then default colors will be used for visualization.')
-	parser.add_argument('-f', '--force', default=False,
-		action='store_true', help='force overwrite already existing output '
-		'directory. By default, pong will prompt the user before overwriting.')
+    parser.add_argument('-i', '--ind2pop', default=None,
+        help='ind2pop data (can be either a Q-matrix column number or the ' 
+        'path to a file containing the data).')
+    parser.add_argument('-n', '--pop_names', default=None,
+        help='Path to file containing population order/names.')
+    parser.add_argument('-l', '--color_list',
+        help='List of colors to be used for visualization. If this file is not '
+        'included, then default colors will be used for visualization.')
+    parser.add_argument('-f', '--force', default=False,
+        action='store_true', help='force overwrite already existing output '
+        'directory. By default, pong will prompt the user before overwriting.')
 
-	parser.add_argument('-s', '--sim_threshold', type=float,
-		default=0.97, help='choose threshold to combine redundant clusters at '
-		'a given K. Default = 0.97')
-	parser.add_argument('--col_delim', default=None,
-		help='Provide the character on which to split columns. Default is '
-		'whitespace (of any length).')
-	parser.add_argument('--dist_metric',
-		default='jaccard', help='distance metric to be used for comparing '
-		'cluster similarities. Choose from %s. Default = jaccard' 
-		% str(dist_metrics))
-	parser.add_argument('-v', '--verbose', default=False,
-		action='store_true', help='Report more details about clustering '
-		'results to the command line, and print all cluster distances in the '
-		'output files (by default, only the best 5 are printed).')
+    parser.add_argument('-s', '--sim_threshold', type=float,
+        default=0.97, help='choose threshold to combine redundant clusters at '
+        'a given K. Default = 0.97')
+    parser.add_argument('--col_delim', default=None,
+        help='Provide the character on which to split columns. Default is '
+        'whitespace (of any length).')
+    parser.add_argument('--dist_metric',
+        default='jaccard', help='distance metric to be used for comparing '
+        'cluster similarities. Choose from %s. Default = jaccard' 
+        % str(dist_metrics))
+    parser.add_argument('-v', '--verbose', default=False,
+        action='store_true', help='Report more details about clustering '
+        'results to the command line, and print all cluster distances in the '
+        'output files (by default, only the best 5 are printed).')
 
-	parser.add_argument('-g', '--greedy', default=False, action='store_true',
-		help='Force the use of the greedy algorithm if a set of disjoint '
-		'cliques cannot be found. By default, pong prompts the user with a '
-		'choice of whether to continue with the greedy algorithm, or to '
-		'exit and re-run with different parameters.')
-	opts = parser.parse_args()
+    parser.add_argument('-g', '--greedy', default=False, action='store_true',
+        help='Force the use of the greedy algorithm if a set of disjoint '
+        'cliques cannot be found. By default, pong prompts the user with a '
+        'choice of whether to continue with the greedy algorithm, or to '
+        'exit and re-run with different parameters.')
+    
+    parser.add_argument('--viz_format', default='png', choices=['png', 'svg'],
+        help='Output format for the visualization plot. Default = png')
+    
+    # *** NUEVO ARGUMENTO DPI AÑADIDO ***
+    parser.add_argument('--dpi', type=int, default=200,
+        help='Resolution (dots per inch) for PNG output. Default = 200')
+    
+    opts = parser.parse_args()
 
-	# Check system Python version and dependency versions. These are enforced
-	# when installing/upgrading via pip, but not if running dev version.
-	if sys.version_info.major != 3:
-		sys.exit('Error: You are running Python %d; pong requires version 3.' % sys.version_info.major)
-	
-	# Check dependency versions - using flexible version checking
-	fmt_v = lambda module: module.__version__.split('.')
-	
-	# Check Python version (3.7+)
-	if sys.version_info.major != 3 or sys.version_info.minor < 7:
-		sys.exit(f'Error: pong requires Python 3.7 or higher. You are running Python {sys.version_info.major}.{sys.version_info.minor}')
-	
-	# Check numpy version (1.19+ or 2.0+) - flexible for both major versions
-	np_major = int(fmt_v(np)[0])
-	np_minor = int(fmt_v(np)[1]) if len(fmt_v(np)) > 1 else 0
-	if np_major == 1 and np_minor < 19:
-		sys.stdout.write(f'Warning: pong expects numpy >= 1.19 or >= 2.0, but you have {np.__version__}. '
-			f'Some features may not work correctly.\n')
-	# numpy 2.x is also supported, no warning needed
-	
-	# Check munkres version (1.1+) - current version 1.1.4 is fine
-	munkres_major = int(fmt_v(munkres)[0])
-	munkres_minor = int(fmt_v(munkres)[1]) if len(fmt_v(munkres)) > 1 else 0
-	if munkres_major < 1 or (munkres_major == 1 and munkres_minor < 1):
-		sys.stdout.write(f'Warning: pong expects munkres >= 1.1, but you have {munkres.__version__}. '
-			f'Some features may not work correctly.\n')
-	
-	# Check networkx version (2.5+) - current version 2.8.8 is fine
-	nx_major = int(fmt_v(nx)[0])
-	nx_minor = int(fmt_v(nx)[1]) if len(fmt_v(nx)) > 1 else 0
-	if nx_major < 2 or (nx_major == 2 and nx_minor < 5):
-		sys.stdout.write(f'Warning: pong expects networkx >= 2.5, but you have {nx.__version__}. '
-			f'Some features may not work correctly.\n')
-
-
-	# Check validity of pongparams file
-	pong_filemap = path.abspath(opts.filemap)
-	if not path.isfile(pong_filemap):
-		sys.exit('Error: Could not find pong filemap at %s.' % pong_filemap)
-
-	# Check validity of specified distance metric
-	if not opts.dist_metric in dist_metrics:
-		x = (opts.dist_metric, str(dist_metrics))
-		sys.exit('Invalid distance metric: "%s". Please choose from %s' % x)
-
-	printall = opts.verbose
-	
-	ind2pop = None
-	labels = None
-
-	if opts.ind2pop is not None:
-		try:
-			ind2pop = int(opts.ind2pop)
-		except ValueError:
-			ind2pop = path.abspath(opts.ind2pop)
-			if not path.isfile(ind2pop):
-				sys.exit('Error: Could not find ind2pop file at %s.' % ind2pop)
-	
-
-	if opts.pop_names is not None:
-		if ind2pop is None:
-			sys.exit('Error: must provide ind to pop data in order to provide '
-				'pop order data')
-		labels = path.abspath(opts.pop_names)
-		if not path.isfile(labels):
-			sys.exit('Error: Could not find pop order file at %s.' % labels)
+    # Check system Python version and dependency versions. These are enforced
+    # when installing/upgrading via pip, but not if running dev version.
+    if sys.version_info.major != 3:
+        sys.exit('Error: You are running Python %d; pong requires version 3.' % sys.version_info.major)
+    
+    # Check dependency versions - using flexible version checking
+    fmt_v = lambda module: module.__version__.split('.')
+    
+    # Check Python version (3.7+)
+    if sys.version_info.major != 3 or sys.version_info.minor < 7:
+        sys.exit(f'Error: pong requires Python 3.7 or higher. You are running Python {sys.version_info.major}.{sys.version_info.minor}')
+    
+    # Check numpy version (1.19+ or 2.0+) - flexible for both major versions
+    np_major = int(fmt_v(np)[0])
+    np_minor = int(fmt_v(np)[1]) if len(fmt_v(np)) > 1 else 0
+    if np_major == 1 and np_minor < 19:
+        sys.stdout.write(f'Warning: pong expects numpy >= 1.19 or >= 2.0, but you have {np.__version__}. '
+            f'Some features may not work correctly.\n')
+    # numpy 2.x is also supported, no warning needed
+    
+    # Check munkres version (1.1+) - current version 1.1.4 is fine
+    munkres_major = int(fmt_v(munkres)[0])
+    munkres_minor = int(fmt_v(munkres)[1]) if len(fmt_v(munkres)) > 1 else 0
+    if munkres_major < 1 or (munkres_major == 1 and munkres_minor < 1):
+        sys.stdout.write(f'Warning: pong expects munkres >= 1.1, but you have {munkres.__version__}. '
+            f'Some features may not work correctly.\n')
+    
+    # Check networkx version (2.5+) - current version 2.8.8 is fine
+    nx_major = int(fmt_v(nx)[0])
+    nx_minor = int(fmt_v(nx)[1]) if len(fmt_v(nx)) > 1 else 0
+    if nx_major < 2 or (nx_major == 2 and nx_minor < 5):
+        sys.stdout.write(f'Warning: pong expects networkx >= 2.5, but you have {nx.__version__}. '
+            f'Some features may not work correctly.\n')
 
 
+    # Check validity of pongparams file
+    pong_filemap = path.abspath(opts.filemap)
+    if not path.isfile(pong_filemap):
+        sys.exit('Error: Could not find pong filemap at %s.' % pong_filemap)
 
+    # Check validity of specified distance metric
+    if not opts.dist_metric in dist_metrics:
+        x = (opts.dist_metric, str(dist_metrics))
+        sys.exit('Invalid distance metric: "%s". Please choose from %s' % x)
 
-	# Check validity of color file
-	colors = []
-	color_file = opts.color_list
-	if color_file:
-		color_file = path.abspath(color_file)
-		if not path.isfile(color_file):
-			sys.stdout.write('\nWarning: Could not find color file '
-				'at %s.\n' % color_file)
-			
-			r = input('Continue using default colors? (y/n): ')
-			while r not in ('y', 'Y', 'n', 'N'):
-				r = input('Please enter "y" to overwrite or '
-					'"n" to exit: ')
-			if r in ('n', 'N'): sys.exit(1)
+    printall = opts.verbose
+    
+    ind2pop = None
+    labels = None
 
-			color_file = None
-		else:
-			sys.stdout.write('\nCustom colors provided. Visualization utilizes the '
-				'color white.\nIf color file contains white, users are advised to '
-				'replace it with another color.\n')
-			with open(color_file, 'r') as f:
-				colors = [x for x in [l.strip() for l in f] if x != '']
+    if opts.ind2pop is not None:
+        try:
+            ind2pop = int(opts.ind2pop)
+        except ValueError:
+            ind2pop = path.abspath(opts.ind2pop)
+            if not path.isfile(ind2pop):
+                sys.exit('Error: Could not find ind2pop file at %s.' % ind2pop)
+    
 
-
-	# Check and clean output dir
-	outputdir = opts.output_dir
-	if outputdir:
-		outputdir = path.abspath(outputdir)
-	else:
-		dirname = 'pong_output_' + time.strftime('%Y-%m-%d_%Hh%Mm%Ss')
-		outputdir = path.abspath(path.join(os.getcwd(), dirname))
-	
-	if os.path.isdir(outputdir):
-		if opts.force:
-			rmtree(outputdir)
-		else:
-			outputdir_name = os.path.split(outputdir)[1]
-			print('\nOutput dir %s already exists.' % outputdir_name)
-
-			r = input('Overwrite? (y/n): ')
-			while r not in ('y', 'Y', 'n', 'N'):
-				r = input('Please enter "y" to overwrite or "n" to exit: ')
-			if r in ('n', 'N'): sys.exit(1)
-			rmtree(outputdir)
-
-	os.makedirs(outputdir)
-
-
-	# Initialize object to hold references to all main pong data
-	global pongdata
-	pongdata = Pongdata(intro, outputdir, printall)
-	pongdata.colors = colors
-
-	params_used = intro+'\n\n' # ===============\n
-	params_used += 'pong_filemap file: %s\n' % pong_filemap
-	params_used += 'Distance metric: %s\n' % opts.dist_metric
-	params_used += 'Similarity threshold: %f\n' % opts.sim_threshold
-	params_used += 'Verbose: %s\n' % str(pongdata.print_all)
-	params_used += '\nFull command: ' + ' '.join(sys.argv[:]) + '\n'
-
-	pongdata.sim_threshold = opts.sim_threshold
-
-	with open(os.path.join(pongdata.output_dir, 'params_used.txt'), 'w') as f:
-		f.write(params_used)
-
-
-	global run_pong_args
-	run_pong_args = (pongdata, opts, pong_filemap, labels, ind2pop)
-
-
-	# ========================= RUN PONG ======================================
-
-	print(pongdata.intro)
-
-
-	run_pong(*run_pong_args)
-
-	# Always save SVG directly
-	output_svg_path = path.join(pongdata.output_dir, 'visualization.svg')
-	print('Generating SVG visualization...')
-	generate_svg_from_data(pongdata, output_svg_path)
-	print(f'SVG saved to: {output_svg_path}')
-	print('\nVisualization complete. SVG file saved in output directory.')
+    if opts.pop_names is not None:
+        if ind2pop is None:
+            sys.exit('Error: must provide ind to pop data in order to provide '
+                'pop order data')
+        labels = path.abspath(opts.pop_names)
+        if not path.isfile(labels):
+            sys.exit('Error: Could not find pop order file at %s.' % labels)
 
 
 
 
+    # Check validity of color file
+    colors = []
+    color_file = opts.color_list
+    if color_file:
+        color_file = path.abspath(color_file)
+        if not path.isfile(color_file):
+            sys.stdout.write('\nWarning: Could not find color file '
+                'at %s.\n' % color_file)
+            
+            r = input('Continue using default colors? (y/n): ')
+            while r not in ('y', 'Y', 'n', 'N'):
+                r = input('Please enter "y" to overwrite or '
+                    '"n" to exit: ')
+            if r in ('n', 'N'): sys.exit(1)
 
-def generate_svg_from_data(pongdata, output_filename):
-	"""
-	Generate SVG visualization directly from pongdata without using a browser.
-	"""
-	runs = pongdata.runs
-	all_kgroups = pongdata.all_kgroups
-	
-	# Default colors
-	colors = ["#E04B4B", "#6094C3", "#63BC6A", "#A76BB2", "#F0934E",
-		"#FEFB54", "#B37855", "#EF91CA", "#A4A4A4"]
-	colors_26 = ["#f0a3ff", "#0075dc", "#993f00", "#4c005c", "#191919", 
-		"#005c31", "#2bce48", "#ffcc99", "#808080", "#94ffb5", "#8f7c00", 
-		"#9dcc00", "#c20088", "#003380", "#ffa405", "#ffa8bb", "#426600", 
-		"#ff0010", "#5ef1f2", "#00998f", "#e0ff66", "#740aff", "#990000", 
-		"#ffff80", "#ffff00", "#ff5005"]
-	
-	if len(pongdata.colors) > 0:
-		colors = pongdata.colors
-	elif pongdata.K_max > 9:
-		colors = colors_26
-	
-	# SVG dimensions
-	svg_width = 1200
-	plot_width = svg_width * 0.84
-	translate_x = svg_width * 0.08
-	plot_height = 160 * 0.8
-	svg_height_per_plot = 175
-	
-	svg_elements = []
-	
-	# Generate SVG for each K value
-	for kgroup in all_kgroups:
-		K = kgroup.K
-		primary_run = runs[kgroup.primary_run]
-		color_perm = kgroup.color_perm
-		
-		# Get population data
-		if not hasattr(primary_run, 'population_object_data') or primary_run.population_object_data is None:
-			continue
-		
-		pop_data = primary_run.population_object_data
-		num_individuals = sum(len(pop['members']) for pop in pop_data)
-		
-		# Create SVG for this K
-		svg_parts = []
-		svg_parts.append(f'<svg width="{svg_width}" height="{svg_height_per_plot}" xmlns="http://www.w3.org/2000/svg">')
-		
-		# Add K label
-		svg_parts.append(f'<text x="0" y="{plot_height/2 + 10}" font-family="Helvetica" font-size="20" font-weight="bold">K = {K}</text>')
-		
-		# Create chart group
-		svg_parts.append(f'<g transform="translate({translate_x}, 15)">')
-		
-		# Calculate x scale
-		x_max = num_individuals
-		x_scale = plot_width / x_max if x_max > 0 else plot_width
-		
-		# Add background rectangle first (so everything else appears on top)
-		svg_parts.append(f'<rect x="-2.5" y="-2.5" width="{plot_width + 5}" height="{plot_height + 5}" fill="black"/>')
-		
-		# Draw stacked areas for each population
-		current_x = 0
-		tick_positions = []  # Store positions for vertical separator lines
-		for pop_idx, pop in enumerate(pop_data):
-			pop_size = len(pop['members'])
-			# Store position of first member of each population for vertical lines
-			if pop['members']:
-				first_member_idx = pop['members'][0]['index']
-				tick_x = first_member_idx * x_scale
-				tick_positions.append(tick_x)
-			
-			# Collect all member data with their cluster values
-			members_data = []
-			for member in pop['members']:
-				idx = member['index']
-				cluster_vals = {}
-				for key, value in member.items():
-					if key.startswith('cluster'):
-						cluster_num = int(key.replace('cluster', '')) - 1
-						cluster_vals[cluster_num] = value
-				members_data.append((idx, cluster_vals))
-			
-			# Sort by index
-			members_data.sort(key=lambda x: x[0])
-			
-			# Draw each cluster as a stacked area (from bottom to top)
-			# Using step-after curve like D3
-			for cluster_idx in range(K):
-				color_idx = color_perm[cluster_idx] if cluster_idx < len(color_perm) else cluster_idx
-				color = colors[color_idx % len(colors)]
-				
-				# Build path for this cluster layer using step-after
-				path_points = []
-				
-				# Bottom edge (going left to right) - step after
-				for i, (idx, cluster_vals) in enumerate(members_data):
-					# Calculate cumulative Y from bottom
-					cumulative_bottom = sum(cluster_vals.get(c, 0) for c in range(cluster_idx))
-					cumulative_top = cumulative_bottom + cluster_vals.get(cluster_idx, 0)
-					
-					y_bottom = plot_height - (cumulative_bottom * plot_height)
-					y_top = plot_height - (cumulative_top * plot_height)
-					
-					if i == 0:  # First point
-						path_points.append(f'M {idx * x_scale} {y_bottom}')
-					else:
-						# Step after: horizontal line first, then vertical
-						prev_idx = members_data[i-1][0]
-						path_points.append(f'H {idx * x_scale}')
-					
-					path_points.append(f'V {y_top}')
-				
-				# Add final horizontal step
-				if members_data:
-					last_idx = members_data[-1][0]
-					path_points.append(f'H {(last_idx + 1) * x_scale}')
-				
-				# Top edge (going right to left) - step after
-				for i in range(len(members_data) - 1, -1, -1):
-					idx, cluster_vals = members_data[i]
-					cumulative_bottom = sum(cluster_vals.get(c, 0) for c in range(cluster_idx))
-					y_bottom = plot_height - (cumulative_bottom * plot_height)
-					
-					if i == len(members_data) - 1:
-						path_points.append(f'V {y_bottom}')
-					else:
-						path_points.append(f'V {y_bottom}')
-						next_idx = members_data[i+1][0]
-						path_points.append(f'H {idx * x_scale}')
-				
-				# Close to start
-				if members_data:
-					first_idx = members_data[0][0]
-					path_points.append(f'H {first_idx * x_scale}')
-				
-				path_points.append('Z')
-				
-				svg_parts.append(f'<path d="{" ".join(path_points)}" fill="{color}" stroke="none"/>')
-			
-			current_x += pop_size
-		
-		# Draw horizontal line at top (y=0) - after areas so it's visible on top
-		svg_parts.append(f'<line x1="0" y1="0" x2="{plot_width}" y2="0" stroke="#000000" stroke-width="1" stroke-opacity="1"/>')
-		
-		# Draw vertical separator lines at the start of each population (except first)
-		# These lines go from top (y=0) to bottom (y=plot_height) - like tickSize(-indivHeight) in D3
-		# Draw lines for all populations except the first one
-		if len(tick_positions) > 1:
-			for tick_x in tick_positions[1:]:  # Skip first position (no line needed at start)
-				# Draw line with explicit coordinates - ensure it's drawn after all paths
-				# Use stroke="white" temporarily to test visibility, then change back to "black"
-				svg_parts.append(f'<line x1="{tick_x}" y1="0" x2="{tick_x}" y2="{plot_height}" stroke="black" stroke-width="1" stroke-opacity="1"/>')
-		
-		svg_parts.append('</g>')  # Close chart group
-		svg_parts.append('</svg>')
-		
-		svg_elements.append({
-			'content': '\n'.join(svg_parts),
-			'height': svg_height_per_plot
-		})
-	
-	# Combine all SVGs
-	if not svg_elements:
-		sys.exit('Error: No visualization data available to generate SVG.')
-	
-	max_width = svg_width
-	total_height = sum(elem['height'] + 20 for elem in svg_elements) - 20
-	
-	# Create final SVG
-	svg_content = []
-	svg_content.append('<?xml version="1.0" encoding="UTF-8"?>')
-	svg_content.append(f'<svg width="{max_width}" height="{total_height}" xmlns="http://www.w3.org/2000/svg">')
-	
-	current_y = 0
-	for svg_elem in svg_elements:
-		# Extract content from inner SVG
-		inner_svg = svg_elem['content']
-		# Remove outer <svg> tags and add as group
-		inner_content = inner_svg.replace('<svg width="1200" height="175" xmlns="http://www.w3.org/2000/svg">', '').replace('</svg>', '')
-		svg_content.append(f'<g transform="translate(0, {current_y})">')
-		svg_content.append(inner_content)
-		svg_content.append('</g>')
-		current_y += svg_elem['height'] + 20
-	
-	svg_content.append('</svg>')
-	
-	# Write to file
-	output_path = path.abspath(output_filename)
-	with open(output_path, 'w', encoding='utf-8') as f:
-		f.write('\n'.join(svg_content))
+            color_file = None
+        else:
+            sys.stdout.write('\nCustom colors provided. Visualization utilizes the '
+                'color white.\nIf color file contains white, users are advised to '
+                'replace it with another color.\n')
+            with open(color_file, 'r') as f:
+                colors = [x for x in [l.strip() for l in f] if x != '']
+
+
+    # Check and clean output dir
+    outputdir = opts.output_dir
+    if outputdir:
+        outputdir = path.abspath(outputdir)
+    else:
+        dirname = 'pong_output_' + time.strftime('%Y-%m-%d_%Hh%Mm%Ss')
+        outputdir = path.abspath(path.join(os.getcwd(), dirname))
+    
+    if os.path.isdir(outputdir):
+        if opts.force:
+            rmtree(outputdir)
+        else:
+            outputdir_name = os.path.split(outputdir)[1]
+            print('\nOutput dir %s already exists.' % outputdir_name)
+
+            r = input('Overwrite? (y/n): ')
+            while r not in ('y', 'Y', 'n', 'N'):
+                r = input('Please enter "y" to overwrite or "n" to exit: ')
+            if r in ('n', 'N'): sys.exit(1)
+            rmtree(outputdir)
+
+    os.makedirs(outputdir)
+
+
+    # Initialize object to hold references to all main pong data
+    global pongdata
+    pongdata = Pongdata(intro, outputdir, printall)
+    pongdata.colors = colors
+
+    params_used = intro+'\n\n' # ===============\n
+    params_used += 'pong_filemap file: %s\n' % pong_filemap
+    params_used += 'Distance metric: %s\n' % opts.dist_metric
+    params_used += 'Similarity threshold: %f\n' % opts.sim_threshold
+    params_used += 'Verbose: %s\n' % str(pongdata.print_all)
+    params_used += '\nFull command: ' + ' '.join(sys.argv[:]) + '\n'
+
+    pongdata.sim_threshold = opts.sim_threshold
+
+    with open(os.path.join(pongdata.output_dir, 'params_used.txt'), 'w') as f:
+        f.write(params_used)
+
+
+    global run_pong_args
+    run_pong_args = (pongdata, opts, pong_filemap, labels, ind2pop)
+
+
+    # ========================= RUN PONG ======================================
+
+    print(pongdata.intro)
+
+
+    run_pong(*run_pong_args)
+
+    # --- Generate visualization using Matplotlib ---
+    
+    output_filename = f'visualization.{opts.viz_format}'
+    output_viz_path = path.join(pongdata.output_dir, output_filename)
+
+    print(f'Generating visualization ({output_filename})...')
+
+    # *** INICIO DE LA LÓGICA SVG/DPI ***
+    # Almacenar el valor original por si acaso
+    original_svg_fonttype = plt.rcParams['svg.fonttype']
+    
+    if opts.viz_format == 'svg':
+        # Configurar Matplotlib para usar texto real en SVG (editable)
+        plt.rcParams['svg.fonttype'] = 'none'
+        print("SVG text will be saved as editable text (not paths).")
+        print("NOTE: Fonts must be installed on the viewing system to render correctly.")
+    
+    # Llamar al generador, pasando el valor de DPI
+    generate_matplotlib_visualization(pongdata, output_viz_path, opts.dpi)
+    
+    # Restaurar el valor original
+    plt.rcParams['svg.fonttype'] = original_svg_fonttype
+    # *** FIN DE LA LÓGICA SVG/DPI ***
+    
+    print('\nVisualization complete. File saved in output directory.')
+
+
+# =============================================================================
+# --- NUEVA SECCIÓN DE VISUALIZACIÓN ---
+# =============================================================================
+
+def plot_admixture(ax, Q_mat_sorted, boundary_list, col_order=None, colors=None, show_boundaries=True, show_axes_labels=True, show_ticks=True, set_limits=True):
+    """
+    Plot a structure-style bar chart of Q_mat_sorted in the given Axes ax.
+    If colors is not None, it should be a list or array of length K.
+    If col_order is not None, colors are reordered according to col_order.
+
+    Optional controls:
+    - show_boundaries (bool): draw vertical lines at group boundaries. Default True.
+    - show_axes_labels (bool): set X/Y axis labels. Default True.
+    - show_ticks (bool): show axis ticks. Default True.
+    - set_limits (bool): set xlim and ylim to [0, n_samples-1] and [0,1]. Default True.
+    """
+    n_samples, K = Q_mat_sorted.shape
+
+    # If we have a specific color list and a col_order, reorder the colors to match the columns
+    if (colors is not None) and (col_order is not None):
+        # Asegurarse de que col_order y colors sean compatibles
+        if len(col_order) == K and all(idx < len(colors) for idx in col_order):
+            colors = [colors[idx] for idx in col_order]
+        else:
+            # Fallback si col_order o colors no coinciden con K
+            colors = colors[:K]
+
+    # cumulative sum across columns for stacked fill
+    Q_cum = np.cumsum(Q_mat_sorted, axis=1)
+    # Use step='post' with padded x/y so the last bar renders fully and no thin band appears
+    x_edges = np.arange(n_samples + 1)
+    Q_pad = np.vstack([Q_cum, Q_cum[-1]])
+
+    # fill-between for a stacked bar effect
+    for j in range(K):
+        # Usar modulo para evitar errores si hay menos colores que K
+        c = colors[j % len(colors)] if (colors is not None) else None
+        lower = Q_pad[:, j - 1] if j > 0 else np.zeros(n_samples + 1)
+        upper = Q_pad[:, j]
+        ax.fill_between(
+            x_edges,
+            lower,
+            upper,
+            step="post",
+            color=c,
+            linewidth=0,
+            edgecolor='none', # 'none' es más eficiente que 'transparent'
+        )
+
+    # Vertical lines for group boundaries
+    if show_boundaries:
+        for boundary in boundary_list:
+            # Usar línea más fina para mejor estética
+            ax.axvline(boundary, color='black', ls='--', lw=0.5)
+
+    if set_limits:
+        ax.set_xlim(0, n_samples)
+        ax.set_ylim(0, 1)
+
+    if show_axes_labels:
+        ax.set_xlabel("Samples")
+        ax.set_ylabel("Ancestry Proportion")
+
+    if not show_ticks:
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+
+# *** CAMBIO: La firma de la función ahora acepta dpi_value ***
+def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
+    """
+    Genera la visualización usando Matplotlib (basado en la función del usuario)
+    para crear un SVG o PNG más eficiente en memoria.
+    
+    Args:
+        pongdata: El objeto principal de pong.
+        output_filename: Ruta completa donde guardar el archivo (incluye extensión .png o .svg).
+        dpi_value (int): El DPI para guardar la imagen (principalmente para PNG).
+    """
+    runs = pongdata.runs
+    all_kgroups = pongdata.all_kgroups
+
+    if not all_kgroups:
+        print("No K-groups found to plot.")
+        return
+
+    # --- Lógica de Color ---
+    colors = ["#E04B4B", "#6094C3", "#63BC6A", "#A76BB2", "#F0934E",
+              "#FEFB54", "#B37855", "#EF91CA", "#A4A4A4"]
+    colors_26 = ["#f0a3ff", "#0075dc", "#993f00", "#4c005c", "#191919", 
+                 "#005c31", "#2bce48", "#ffcc99", "#808080", "#94ffb5", "#8f7c00", 
+                 "#9dcc00", "#c20088", "#003380", "#ffa405", "#ffa8bb", "#426600", 
+                 "#ff0010", "#5ef1f2", "#00998f", "#e0ff66", "#740aff", "#990000", 
+                 "#ffff80", "#ffff00", "#ff5005"]
+    
+    if len(pongdata.colors) > 0:
+        plot_colors = pongdata.colors
+    elif pongdata.K_max > 9:
+        plot_colors = colors_26
+    else:
+        plot_colors = colors
+    # --- Fin Lógica de Color ---
+
+    # Crear una figura con un subplot por cada K
+    num_plots = len(all_kgroups)
+    fig, axs = plt.subplots(
+        nrows=num_plots, 
+        ncols=1, 
+        figsize=(12, 1.5 * num_plots), 
+        squeeze=False 
+    )
+    axs = axs.flatten()
+
+    valid_plots = 0
+    for i, kgroup in enumerate(all_kgroups):
+        K = kgroup.K
+        primary_run = runs[kgroup.primary_run]
+        color_perm = kgroup.color_perm
+        ax = axs[i]
+
+        if not hasattr(primary_run, 'population_object_data') or primary_run.population_object_data is None:
+            ax.text(0.5, 0.5, f"K = {K} (No data)", ha='center', va='center', transform=ax.transAxes)
+            ax.set_axis_off()
+            continue
+        
+        pop_data = primary_run.population_object_data
+        
+        all_members_data = []
+        boundary_list = []
+        current_idx = 0
+
+        for pop in pop_data:
+            pop_members = pop.get('members', [])
+            if not pop_members:
+                continue
+            
+            if current_idx > 0:
+                boundary_list.append(current_idx)
+                
+            for member in pop_members:
+                cluster_vals = np.zeros(K)
+                for k_idx in range(K):
+                    key = f'cluster{k_idx + 1}'
+                    cluster_vals[k_idx] = member.get(key, 0.0)
+                all_members_data.append(cluster_vals)
+            
+            current_idx += len(pop_members)
+
+        if not all_members_data:
+            ax.text(0.5, 0.5, f"K = {K} (No members)", ha='center', va='center', transform=ax.transAxes)
+            ax.set_axis_off()
+            continue
+
+        Q_mat_sorted = np.array(all_members_data)
+        
+        plot_admixture(
+            ax=ax,
+            Q_mat_sorted=Q_mat_sorted,
+            boundary_list=boundary_list,
+            col_order=color_perm,
+            colors=plot_colors,
+            show_boundaries=True,
+            show_axes_labels=True, 
+            show_ticks=True,
+            set_limits=True
+        )
+        
+        # *** CAMBIO: Etiqueta K movida a -0.08 ***
+        ax.text(-0.08, 0.5, f"K = {K}", 
+                transform=ax.transAxes, 
+                ha='right', 
+                va='center', 
+                fontweight='bold', 
+                fontsize=12)
+        
+        ax.set_xlabel("") 
+        ax.set_ylabel("Ancestry") 
+        
+        if i < num_plots - 1:
+             ax.set_xticks([])
+        else:
+            ax.set_xlabel("Samples")
+            ax.set_xticks([]) 
+
+        valid_plots += 1
+
+    if valid_plots == 0:
+        print("No valid plot data was generated.")
+        plt.close(fig)
+        return
+
+    # *** CAMBIO: Ajuste de layout a 0.09 para dar espacio a la etiqueta ***
+    plt.tight_layout(rect=[0.09, 0.0, 1.0, 1.0])
+
+    # Guardar la figura
+    output_path = path.abspath(output_filename)
+    try:
+        # *** CAMBIO: Usar el dpi_value pasado como argumento ***
+        fig.savefig(output_path, dpi=dpi_value, bbox_inches='tight')
+        print(f"Visualization saved to: {output_path}")
+    except Exception as e:
+        print(f"Error saving visualization: {e}")
+    
+    plt.close(fig) # Cerrar la figura para liberar memoria
+
+
+# =============================================================================
+# --- FIN DE LA SECCIÓN DE VISUALIZACIÓN ---
+# =============================================================================
 
 
 def run_pong(pongdata, opts, pong_filemap, labels, ind2pop):
-	pongdata.status = 1
+    pongdata.status = 1
 
-	t0=time.time()
-	# PARSE INPUT FILE AND ORGANIZE DATA INTO GROUPS OF RUNS PER K
-	print('Parsing input and generating cluster network graph')
-	parse.parse_multicluster_input(pongdata, pong_filemap, opts.ignore_cols, 
-		opts.col_delim, labels, ind2pop)
-
-
-	# MATCH CLUSTERS FOR RUNS WITHIN EACH K AND CONDENSE TO REPRESENTATIVE RUNS
-	print('Matching clusters within each K and finding representative runs')
-	t1 = time.time()
-	cm.clump(pongdata, opts.dist_metric, opts.sim_threshold, opts.greedy)
-
-	# MATCH CLUSTERS ACROSS K
-	print('Matching clusters across K')
-	cm.multicluster_match(pongdata, opts.dist_metric)
-	t2 = time.time()
-
-	# PRINT MATCH CLUSTERS RESULTS
-	write.output_cluster_match_details(pongdata)
-	
-	# print(pongdata.name2id)
-	# COMPUTE BEST-GUESS ALIGNMENTS FOR ALL RUNS WITHIN AND ACROSS K
-	print('Finding best alignment for all runs within and across K')
-	t3 = time.time()
-	align.compute_alignments(pongdata, opts.sim_threshold)
-	t4 = time.time()
-
-	if pongdata.print_all:
-		# PRINT BEST-FIT ALIGNMENTS
-		write.output_alignments(pongdata)
+    t0=time.time()
+    # PARSE INPUT FILE AND ORGANIZE DATA INTO GROUPS OF RUNS PER K
+    print('Parsing input and generating cluster network graph')
+    parse.parse_multicluster_input(pongdata, pong_filemap, opts.ignore_cols, 
+        opts.col_delim, labels, ind2pop)
 
 
-	# GENERATE COLOR INFO
-	parse.convert_data(pongdata)
-	distruct.generate_color_perms(pongdata)
-	if len(pongdata.colors) > 0:
-		if (pongdata.print_all):
-			print('Generating perm files for Distruct')
-			distruct.generate_distruct_perm_files(pongdata, pongdata.colors)
-	
+    # MATCH CLUSTERS FOR RUNS WITHIN EACH K AND CONDENSE TO REPRESENTATIVE RUNS
+    print('Matching clusters within each K and finding representative runs')
+    t1 = time.time()
+    cm.clump(pongdata, opts.dist_metric, opts.sim_threshold, opts.greedy)
 
-	pongdata.status = 2
-	
-	# write.write_json(pongdata)
+    # MATCH CLUSTERS ACROSS K
+    print('Matching clusters across K')
+    cm.multicluster_match(pongdata, opts.dist_metric)
+    t2 = time.time()
 
-	print('match time: %.2fs' % (t2-t1))
-	print('align time: %.2fs' % (t4-t3))
-	print('total time: %.2fs' % ((t2-t0)+(t4-t3)))
+    # PRINT MATCH CLUSTERS RESULTS
+    write.output_cluster_match_details(pongdata)
+    
+    # print(pongdata.name2id)
+    # COMPUTE BEST-GUESS ALIGNMENTS FOR ALL RUNS WITHIN AND ACROSS K
+    print('Finding best alignment for all runs within and across K')
+    t3 = time.time()
+    align.compute_alignments(pongdata, opts.sim_threshold)
+    t4 = time.time()
+
+    if pongdata.print_all:
+        # PRINT BEST-FIT ALIGNMENTS
+        write.output_alignments(pongdata)
 
 
+    # GENERATE COLOR INFO
+    parse.convert_data(pongdata)
+    distruct.generate_color_perms(pongdata)
+    if len(pongdata.colors) > 0:
+        if (pongdata.print_all):
+            print('Generating perm files for Distruct')
+            distruct.generate_distruct_perm_files(pongdata, pongdata.colors)
+    
 
+    pongdata.status = 2
+    
+    # write.write_json(pongdata)
 
-
-
-
-
-
+    print('match time: %.2fs' % (t2-t1))
+    print('align time: %.2fs' % (t4-t3))
+    print('total time: %.2fs' % ((t2-t0)+(t4-t3)))
 
 
 if __name__ == '__main__':
-	main()
+    main()
