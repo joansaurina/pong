@@ -190,10 +190,16 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 	
 	if not labels_file:
 		pops = set(pong.ind2pop)
-		# np.where returns a tuple in numpy 2.x, need to handle it properly
-		pong.pop_order = [x[1] for x in sorted([(np.where(pong.ind2pop==p)[0], p) for p in pops])]
-		pong.popcode2popname = {p:p for p in pops}
-	
+		pairs = []
+		for p in pops:
+			idx = np.where(pong.ind2pop == p)[0]
+			first = int(idx[0])     # <- índice ESCALAR
+			pairs.append((first, p))
+
+		pairs.sort()                # ordenado por posición en ind2pop
+		pong.pop_order = [p for _, p in pairs]
+		pong.popcode2popname = {p: p for p in pops}
+
 	else:
 		labels = np.genfromtxt(labels_file, delimiter='\t', autostrip=True, 
 			dtype=str, unpack=True)
