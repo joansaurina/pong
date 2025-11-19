@@ -60,7 +60,7 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 		sys.exit('Error: filemap is empty.')
 
 	if (qfiles_info.size == 1):
-		qfiles_info = [(str(qfiles_info['f0']), int(qfiles_info['f1']), str(qfiles_info['f2']))]
+		qfiles_info = [(str(qfiles_info['f0'][0]), int(qfiles_info['f1'][0]), str(qfiles_info['f2'][0]))]
 		
 	krange = sorted({q[1] for q in qfiles_info})
 
@@ -93,11 +93,6 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 				'value of K from the Q matrices.')
 			pong.colors = []
 		
-		# TO DO: if k_max < 26, option to use default colors
-
-	# Decode string escapes in col delim (e.g. convert unicode escaped tab to string tab)
-	# This prevents numpy from interpreting user-input tab as literally backslash t
-	# Python 3 compatible version
 	if col_delim:
 		# Handle escape sequences like \t, \n, etc.
 		try:

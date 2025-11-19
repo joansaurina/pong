@@ -315,7 +315,6 @@ def main():
 # =============================================================================
 # --- NUEVA SECCIÓN DE VISUALIZACIÓN ---
 # =============================================================================
-
 def plot_admixture(ax, Q_mat_sorted, boundary_list, col_order=None, colors=None, show_boundaries=True, show_axes_labels=True, show_ticks=True, set_limits=True):
     """
     Plot a structure-style bar chart of Q_mat_sorted in the given Axes ax.
@@ -380,16 +379,10 @@ def plot_admixture(ax, Q_mat_sorted, boundary_list, col_order=None, colors=None,
         ax.set_yticks([])
 
 
-# *** CAMBIO: La firma de la función ahora acepta dpi_value ***
 def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
     """
-    Genera la visualización usando Matplotlib (basado en la función del usuario)
-    para crear un SVG o PNG más eficiente en memoria.
-    
-    Args:
-        pongdata: El objeto principal de pong.
-        output_filename: Ruta completa donde guardar el archivo (incluye extensión .png o .svg).
-        dpi_value (int): El DPI para guardar la imagen (principalmente para PNG).
+    Genera la visualización usando Matplotlib.
+    CORRECCIÓN: Mapea los índices numéricos a los nombres reales de las poblaciones.
     """
     runs = pongdata.runs
     all_kgroups = pongdata.all_kgroups
@@ -413,19 +406,23 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
         plot_colors = colors_26
     else:
         plot_colors = colors
-    # --- Fin Lógica de Color ---
 
-    # Crear una figura con un subplot por cada K
+    # Crear figura
     num_plots = len(all_kgroups)
     fig, axs = plt.subplots(
         nrows=num_plots, 
         ncols=1, 
-        figsize=(12, 1.5 * num_plots), 
+        figsize=(14, 2.0 * num_plots), 
         squeeze=False 
     )
     axs = axs.flatten()
 
     valid_plots = 0
+    
+    # Variables para guardar etiquetas y límites de la primera pasada
+    pop_labels_list = []
+    pop_boundary_list = [] 
+    
     for i, kgroup in enumerate(all_kgroups):
         K = kgroup.K
         primary_run = runs[kgroup.primary_run]
@@ -433,7 +430,6 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
         ax = axs[i]
 
         if not hasattr(primary_run, 'population_object_data') or primary_run.population_object_data is None:
-            ax.text(0.5, 0.5, f"K = {K} (No data)", ha='center', va='center', transform=ax.transAxes)
             ax.set_axis_off()
             continue
         
@@ -442,11 +438,37 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
         all_members_data = []
         boundary_list = []
         current_idx = 0
-
+        
+        # Capturamos info de poblaciones solo en la primera iteración
+        capture_labels = (len(pop_labels_list) == 0)
+        
         for pop in pop_data:
             pop_members = pop.get('members', [])
             if not pop_members:
                 continue
+            
+            # --- RECUPERAR EL NOMBRE REAL DE LA POBLACIÓN ---
+            if capture_labels:
+                real_name = "Pop" # Fallback
+                
+                # 1. Intentar obtener el índice de la población
+                p_idx = pop.get('population_index')
+                
+                # 2. Cruzar con pongdata.pop_order si existe
+                if p_idx is not None and pongdata.pop_order and p_idx < len(pongdata.pop_order):
+                    pop_code = pongdata.pop_order[p_idx]
+                    
+                    # 3. Si hay un mapeo de código a nombre completo, usarlo
+                    if pongdata.popcode2popname and pop_code in pongdata.popcode2popname:
+                        real_name = pongdata.popcode2popname[pop_code]
+                    else:
+                        real_name = pop_code
+                else:
+                    # Si falla todo, usar lo que venga en el objeto o un genérico
+                    real_name = pop.get('name', f"Pop {p_idx}")
+
+                pop_labels_list.append(real_name)
+            # -----------------------------------------------
             
             if current_idx > 0:
                 boundary_list.append(current_idx)
@@ -461,12 +483,15 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
             current_idx += len(pop_members)
 
         if not all_members_data:
-            ax.text(0.5, 0.5, f"K = {K} (No members)", ha='center', va='center', transform=ax.transAxes)
             ax.set_axis_off()
             continue
 
         Q_mat_sorted = np.array(all_members_data)
         
+        if capture_labels:
+            pop_boundary_list = boundary_list
+
+        # Dibujar el gráfico de barras
         plot_admixture(
             ax=ax,
             Q_mat_sorted=Q_mat_sorted,
@@ -479,22 +504,55 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
             set_limits=True
         )
         
-        # *** CAMBIO: Etiqueta K movida a -0.08 ***
+        # Etiqueta K a la izquierda
         ax.text(-0.08, 0.5, f"K = {K}", 
                 transform=ax.transAxes, 
-                ha='right', 
-                va='center', 
-                fontweight='bold', 
-                fontsize=12)
+                ha='right', va='center', fontweight='bold', fontsize=12)
         
         ax.set_xlabel("") 
         ax.set_ylabel("Ancestry") 
         
+        # --- GESTIÓN DE EJES X Y ETIQUETAS ---
+        
         if i < num_plots - 1:
+             # Si NO es el último gráfico, ocultamos todo el eje X
              ax.set_xticks([])
+             ax.set_xticklabels([])
         else:
-            ax.set_xlabel("Samples")
-            ax.set_xticks([]) 
+            # Si ES el último gráfico, configuramos las etiquetas
+            if pongdata.ind2pop is not None and len(pop_labels_list) > 0:
+                print(f"Colocando {len(pop_labels_list)} etiquetas reales: {pop_labels_list[:5]}...") 
+                
+                n_samples = Q_mat_sorted.shape[0]
+                full_boundaries = [0] + pop_boundary_list + [n_samples]
+                
+                tick_positions = []
+                tick_labels = []
+
+                for j in range(len(pop_labels_list)):
+                    if j >= len(full_boundaries) - 1: break
+                    
+                    start_b = full_boundaries[j]
+                    end_b = full_boundaries[j+1]
+                    mid = (start_b + end_b) / 2
+                    
+                    tick_positions.append(mid)
+                    tick_labels.append(str(pop_labels_list[j]).upper())
+
+                # APLICAR TICKS NATIVOS
+                ax.set_xticks(tick_positions)
+                ax.set_xticklabels(tick_labels, rotation=90, ha='center', fontsize=8)
+                
+                # Ocultar los "palitos" del tick, dejar solo el texto
+                ax.tick_params(axis='x', which='both', length=0, pad=5)
+                
+                # Quitamos la etiqueta genérica del eje
+                ax.set_xlabel("")
+                
+            else:
+                # Caso por defecto si no hay pop info
+                ax.set_xticks([])
+                ax.set_xlabel("Samples")
 
         valid_plots += 1
 
@@ -503,20 +561,17 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
         plt.close(fig)
         return
 
-    # *** CAMBIO: Ajuste de layout a 0.09 para dar espacio a la etiqueta ***
-    plt.tight_layout(rect=[0.09, 0.0, 1.0, 1.0])
+    # Forzamos espacio abajo explícitamente
+    plt.subplots_adjust(bottom=0.25, hspace=0.4)
 
-    # Guardar la figura
     output_path = path.abspath(output_filename)
     try:
-        # *** CAMBIO: Usar el dpi_value pasado como argumento ***
         fig.savefig(output_path, dpi=dpi_value, bbox_inches='tight')
         print(f"Visualization saved to: {output_path}")
     except Exception as e:
         print(f"Error saving visualization: {e}")
     
-    plt.close(fig) # Cerrar la figura para liberar memoria
-
+    plt.close(fig)
 
 # =============================================================================
 # --- FIN DE LA SECCIÓN DE VISUALIZACIÓN ---
