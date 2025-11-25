@@ -315,56 +315,65 @@ def main():
 # =============================================================================
 # --- NUEVA SECCIÓN DE VISUALIZACIÓN ---
 # =============================================================================
-def plot_admixture(ax, Q_mat_sorted, boundary_list, col_order=None, colors=None, show_boundaries=True, show_axes_labels=True, show_ticks=True, set_limits=True):
+def plot_admixture(ax, Q_mat_sorted, boundary_list, col_order=None, colors=None, 
+                   show_boundaries=True, show_axes_labels=True, show_ticks=True, 
+                   set_limits=True):
     """
-    Plot a structure-style bar chart of Q_mat_sorted in the given Axes ax.
-    If colors is not None, it should be a list or array of length K.
-    If col_order is not None, colors are reordered according to col_order.
-
-    Optional controls:
-    - show_boundaries (bool): draw vertical lines at group boundaries. Default True.
-    - show_axes_labels (bool): set X/Y axis labels. Default True.
-    - show_ticks (bool): show axis ticks. Default True.
-    - set_limits (bool): set xlim and ylim to [0, n_samples-1] and [0,1]. Default True.
+    Optimized plotting using Rasterization for Biobank-scale data.
+    Instead of drawing millions of vector bars, this 'paints' the data as a 
+    bitmap image embedded in the SVG, keeping text as vectors.
     """
     n_samples, K = Q_mat_sorted.shape
 
-    # If we have a specific color list and a col_order, reorder the colors to match the columns
+    # Handle color ordering
     if (colors is not None) and (col_order is not None):
-        # Asegurarse de que col_order y colors sean compatibles
         if len(col_order) == K and all(idx < len(colors) for idx in col_order):
             colors = [colors[idx] for idx in col_order]
         else:
-            # Fallback si col_order o colors no coinciden con K
             colors = colors[:K]
 
-    # cumulative sum across columns for stacked fill
+    # Cumulative sum for stacking
     Q_cum = np.cumsum(Q_mat_sorted, axis=1)
-    # Use step='post' with padded x/y so the last bar renders fully and no thin band appears
-    x_edges = np.arange(n_samples + 1)
-    Q_pad = np.vstack([Q_cum, Q_cum[-1]])
-
-    # fill-between for a stacked bar effect
+    
+    # We use a simple 0 to N x-axis
+    x = np.arange(n_samples)
+    
+    # We prepend a column of zeros for the bottom of the first stack
+    zeros = np.zeros(n_samples)
+    
+    # --- CORE OPTIMIZATION: RASTERIZATION ---
+    # We loop through K populations.
+    # Crucially, we set `rasterized=True`. 
+    # This forces Matplotlib to render the complex data polygons as pixels 
+    # (bitmap) within the SVG, saving GBs of space.
+    
     for j in range(K):
-        # Usar modulo para evitar errores si hay menos colores que K
         c = colors[j % len(colors)] if (colors is not None) else None
-        lower = Q_pad[:, j - 1] if j > 0 else np.zeros(n_samples + 1)
-        upper = Q_pad[:, j]
+        
+        lower = Q_cum[:, j - 1] if j > 0 else zeros
+        upper = Q_cum[:, j]
+        
+        # We fill the area between the previous population and the current one.
+        # Note: distinct from 'bar', this creates a smooth 'painted' area.
         ax.fill_between(
-            x_edges,
-            lower,
-            upper,
-            step="post",
-            color=c,
+            x, lower, upper,
+            facecolor=c,
+            edgecolor='none',
             linewidth=0,
-            edgecolor='none', # 'none' es más eficiente que 'transparent'
+            rasterized=True  # <--- MAGIC PARAMETER: Reduces file size from GB to MB
         )
 
+    # --- VECTOR ELEMENTS (Keep these as vectors for sharpness) ---
+    
     # Vertical lines for group boundaries
     if show_boundaries:
+        # If there are too many boundaries (e.g. > 500), rasterize them too 
+        # to avoid clutter. Otherwise, keep them vector.
+        rasterize_boundaries = len(boundary_list) > 1000
+        
         for boundary in boundary_list:
-            # Usar línea más fina para mejor estética
-            ax.axvline(boundary, color='black', ls='--', lw=0.5)
+            ax.axvline(boundary, color='black', ls='--', lw=0.5, 
+                       rasterized=rasterize_boundaries)
 
     if set_limits:
         ax.set_xlim(0, n_samples)
@@ -372,7 +381,7 @@ def plot_admixture(ax, Q_mat_sorted, boundary_list, col_order=None, colors=None,
 
     if show_axes_labels:
         ax.set_xlabel("Samples")
-        ax.set_ylabel("Ancestry Proportion")
+        ax.set_ylabel("Ancestry")
 
     if not show_ticks:
         ax.set_xticks([])
@@ -381,8 +390,7 @@ def plot_admixture(ax, Q_mat_sorted, boundary_list, col_order=None, colors=None,
 
 def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
     """
-    Genera la visualización usando Matplotlib.
-    CORRECCIÓN: Mapea los índices numéricos a los nombres reales de las poblaciones.
+    Generates the visualization with mixed-mode rendering support.
     """
     runs = pongdata.runs
     all_kgroups = pongdata.all_kgroups
@@ -391,9 +399,9 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
         print("No K-groups found to plot.")
         return
 
-    # --- Lógica de Color ---
-    colors = ["#E04B4B", "#6094C3", "#63BC6A", "#A76BB2", "#F0934E",
-              "#FEFB54", "#B37855", "#EF91CA", "#A4A4A4"]
+    # --- Color Palette Logic ---
+    colors_default = ["#E04B4B", "#6094C3", "#63BC6A", "#A76BB2", "#F0934E",
+                      "#FEFB54", "#B37855", "#EF91CA", "#A4A4A4"]
     colors_26 = ["#f0a3ff", "#0075dc", "#993f00", "#4c005c", "#191919", 
                  "#005c31", "#2bce48", "#ffcc99", "#808080", "#94ffb5", "#8f7c00", 
                  "#9dcc00", "#c20088", "#003380", "#ffa405", "#ffa8bb", "#426600", 
@@ -405,21 +413,22 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
     elif pongdata.K_max > 9:
         plot_colors = colors_26
     else:
-        plot_colors = colors
+        plot_colors = colors_default
 
-    # Crear figura
+    # --- Setup Figure ---
     num_plots = len(all_kgroups)
+    
+    # Calculate height: give smaller height per plot for massive datasets 
+    # to keep aspect ratio manageable
     fig, axs = plt.subplots(
         nrows=num_plots, 
         ncols=1, 
-        figsize=(14, 2.0 * num_plots), 
+        figsize=(15, 2.5 * num_plots), 
         squeeze=False 
     )
     axs = axs.flatten()
 
     valid_plots = 0
-    
-    # Variables para guardar etiquetas y límites de la primera pasada
     pop_labels_list = []
     pop_boundary_list = [] 
     
@@ -434,12 +443,11 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
             continue
         
         pop_data = primary_run.population_object_data
-        
         all_members_data = []
         boundary_list = []
         current_idx = 0
         
-        # Capturamos info de poblaciones solo en la primera iteración
+        # Only capture labels on the first plot to avoid redundancy
         capture_labels = (len(pop_labels_list) == 0)
         
         for pop in pop_data:
@@ -447,32 +455,24 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
             if not pop_members:
                 continue
             
-            # --- RECUPERAR EL NOMBRE REAL DE LA POBLACIÓN ---
+            # Label Extraction Logic
             if capture_labels:
-                real_name = "Pop" # Fallback
-                
-                # 1. Intentar obtener el índice de la población
+                real_name = "Pop"
                 p_idx = pop.get('population_index')
-                
-                # 2. Cruzar con pongdata.pop_order si existe
                 if p_idx is not None and pongdata.pop_order and p_idx < len(pongdata.pop_order):
                     pop_code = pongdata.pop_order[p_idx]
-                    
-                    # 3. Si hay un mapeo de código a nombre completo, usarlo
                     if pongdata.popcode2popname and pop_code in pongdata.popcode2popname:
                         real_name = pongdata.popcode2popname[pop_code]
                     else:
                         real_name = pop_code
                 else:
-                    # Si falla todo, usar lo que venga en el objeto o un genérico
                     real_name = pop.get('name', f"Pop {p_idx}")
-
                 pop_labels_list.append(real_name)
-            # -----------------------------------------------
-            
+
             if current_idx > 0:
                 boundary_list.append(current_idx)
                 
+            # Flatten member data for matrix construction
             for member in pop_members:
                 cluster_vals = np.zeros(K)
                 for k_idx in range(K):
@@ -491,7 +491,7 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
         if capture_labels:
             pop_boundary_list = boundary_list
 
-        # Dibujar el gráfico de barras
+        # --- PLOT CALL ---
         plot_admixture(
             ax=ax,
             Q_mat_sorted=Q_mat_sorted,
@@ -504,53 +504,40 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
             set_limits=True
         )
         
-        # Etiqueta K a la izquierda
-        ax.text(-0.08, 0.5, f"K = {K}", 
-                transform=ax.transAxes, 
+        # K Label
+        ax.text(-0.07, 0.5, f"K={K}", transform=ax.transAxes, 
                 ha='right', va='center', fontweight='bold', fontsize=12)
         
+        # --- Axis Cleanup ---
         ax.set_xlabel("") 
         ax.set_ylabel("Ancestry") 
         
-        # --- GESTIÓN DE EJES X Y ETIQUETAS ---
-        
         if i < num_plots - 1:
-             # Si NO es el último gráfico, ocultamos todo el eje X
              ax.set_xticks([])
              ax.set_xticklabels([])
         else:
-            # Si ES el último gráfico, configuramos las etiquetas
+            # Axis labels for the bottom-most plot
             if pongdata.ind2pop is not None and len(pop_labels_list) > 0:
-                print(f"Colocando {len(pop_labels_list)} etiquetas reales: {pop_labels_list[:5]}...") 
-                
                 n_samples = Q_mat_sorted.shape[0]
                 full_boundaries = [0] + pop_boundary_list + [n_samples]
-                
                 tick_positions = []
                 tick_labels = []
 
                 for j in range(len(pop_labels_list)):
                     if j >= len(full_boundaries) - 1: break
-                    
                     start_b = full_boundaries[j]
                     end_b = full_boundaries[j+1]
                     mid = (start_b + end_b) / 2
                     
-                    tick_positions.append(mid)
-                    tick_labels.append(str(pop_labels_list[j]).upper())
+                    # Only label if population segment is large enough to read
+                    if (end_b - start_b) > (n_samples * 0.005): 
+                        tick_positions.append(mid)
+                        tick_labels.append(str(pop_labels_list[j]).upper())
 
-                # APLICAR TICKS NATIVOS
                 ax.set_xticks(tick_positions)
                 ax.set_xticklabels(tick_labels, rotation=90, ha='center', fontsize=8)
-                
-                # Ocultar los "palitos" del tick, dejar solo el texto
                 ax.tick_params(axis='x', which='both', length=0, pad=5)
-                
-                # Quitamos la etiqueta genérica del eje
-                ax.set_xlabel("")
-                
             else:
-                # Caso por defecto si no hay pop info
                 ax.set_xticks([])
                 ax.set_xlabel("Samples")
 
@@ -561,13 +548,16 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
         plt.close(fig)
         return
 
-    # Forzamos espacio abajo explícitamente
-    plt.subplots_adjust(bottom=0.25, hspace=0.4)
+    plt.subplots_adjust(bottom=0.25, hspace=0.3)
 
     output_path = path.abspath(output_filename)
     try:
+        # DPI IS CRITICAL HERE:
+        # Since we are rasterizing the bars, DPI controls the resolution of that specific image part.
+        # 300 is usually print quality. 150-200 is good for screens.
         fig.savefig(output_path, dpi=dpi_value, bbox_inches='tight')
         print(f"Visualization saved to: {output_path}")
+        print(f"Note: Data area is rasterized to reduce file size. Text remains editable.")
     except Exception as e:
         print(f"Error saving visualization: {e}")
     
