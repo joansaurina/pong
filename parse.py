@@ -349,57 +349,22 @@ def validate_run_id(runid):
 				'numbers (0-9), underscores (_) and hyphens (-).')
 
 
-# def convert_data(pong):
-# 	''' adds another format of run data (for use by D3)
-# 	'''
-# 	if pong.ind2pop is not None:
-# 		order = [[] for i in xrange(len(pong.pop_order))]
-# 		for i,p in enumerate(pong.ind2pop):
-# 			order[pong.pop_order.index(p)].append(i)
+def treat_runs_as_individual_kgroups(pong):
+	"""
+	Modifies pong.all_kgroups to treat each run as its own group for plotting.
+	This bypasses the consensus/clumping logic by creating a new Kgroup for
+	each run and setting that run as the primary run of its group.
+	"""
+	new_kgroups = []
+	# Sort runs by K and then by name to ensure a consistent plotting order
+	sorted_runs = sorted(pong.runs.values(), key=lambda r: (r.K, r.name))
 
-# 	for run in pong.runs.values():
-# 		data = np.array([run.data[i] for i in run.alignment-1]).transpose()
+	for run in sorted_runs:
+		# Create a new Kgroup just for this run
+		kgroup = Kgroup(run.K)
+		kgroup.all_runs.append(run.id)
+		kgroup.primary_run = run.id # This run is its own representative
+		kgroup.rep_runs.append(run.id) # Also treat it as the representative run
+		new_kgroups.append(kgroup)
 
-# 		if pong.ind2pop is not None:
-# 			run.data_transpose_3d = []
-# 			run.data_transpose_2d = []
-# 			for p in order: 
-# 				x = [data[i].tolist() for i in p]
-# 				run.data_transpose_3d.append(x)
-# 				run.data_transpose_2d += x
-			
-# 		else:
-# 			run.data_transpose_2d = data.tolist() #[x.tolist() for x in data.tolist()]
-
-		
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+	pong.all_kgroups = new_kgroups

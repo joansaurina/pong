@@ -32,13 +32,21 @@ def compute_alignments(pong, sim_thresh):
 		primary_alignment = [x+1 for x in range(kgroup.K)]
 		aligned_perms = [primary_alignment]
 		runs[kgroup.primary_run].rel_alignment = primary_alignment
-
-		for run in [x for x in kgroup.all_runs if x != kgroup.primary_run]:
-			_, best_perm = get_best_perm(pong, kgroup.primary_run, 
-				run, sim_thresh)
-			# best_perm = pong.cluster_matches[kgroup.primary_run][run].perm
-			aligned_perms.append(best_perm)
-			runs[run].rel_alignment = best_perm
+		
+		# When plotting all runs, we align each run to the very first run for consistency
+		is_plot_all_mode = pong.runs[kgroup.primary_run].id == kgroup.primary_run and len(kgroup.all_runs) == 1
+		
+		if is_plot_all_mode and kgroup != all_kgroups[0]:
+			reference_run_id = all_kgroups[0].primary_run
+			current_run_id = kgroup.primary_run
+			# Ensure the match was calculated. It should have been in cm.clump
+			if reference_run_id in pong.cluster_matches and current_run_id in pong.cluster_matches[reference_run_id]:
+				_, best_perm = get_best_perm(pong, reference_run_id, current_run_id, sim_thresh)
+				runs[current_run_id].rel_alignment = best_perm
+				aligned_perms = [best_perm]
+			else: # Fallback if match doesn't exist, though it should
+				runs[current_run_id].rel_alignment = primary_alignment
+				aligned_perms = [primary_alignment]
 		
 		kgroup.rel_alignment = np.array(aligned_perms)
 
@@ -139,6 +147,12 @@ def align_perms_across_K(pong):
 	# GENERATE ALL PERMS
 	all_perms = []
 	for kgroup1, kgroup2 in zip(all_kgroups[:-1], all_kgroups[1:]):
+		# When using --plot-all-runs, multiple kgroups can have the same K.
+		# Skip alignment if K values are the same, as this logic is for across-K alignment.
+		run1_id, run2_id = kgroup1.primary_run, kgroup2.primary_run
+		if pong.runs[run1_id].K == pong.runs[run2_id].K:
+			continue
+
 		perm1, perm2 = get_best_perm(pong, kgroup1.primary_run, 
 			kgroup2.primary_run)
 		all_perms.append([perm1, perm2])
@@ -147,6 +161,10 @@ def align_perms_across_K(pong):
 
 	# RESIZE ALL PERMS s.t. they all have length K_max
 	# this code sux
+	if not all_perms:
+		# If no across-K alignments were made (e.g., all runs have the same K),
+		# just create identity alignments for each kgroup.
+		return [[x+1 for x in range(kgroup.K)] for kgroup in all_kgroups]
 	aligned_perms = [all_perms[0][0], all_perms[0][1]]
 	for i in range(1, len(all_perms)):
 		

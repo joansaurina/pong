@@ -118,6 +118,26 @@ def clump(pong, dist_metric, sim_threshold, greedy):
 	pong.sort_by = cliques[0][0]
 
 
+def calculate_plot_all_matches(pong, dist_metric):
+	"""
+	When using --plot-all-runs, we don't run the full clumping logic.
+	However, we still need to calculate matches between each run and the
+	first run to ensure consistent color alignment.
+	"""
+	all_kgroups = pong.all_kgroups
+	if not all_kgroups:
+		return
+
+	reference_run_id = all_kgroups[0].primary_run
+	reference_run = pong.runs[reference_run_id]
+
+	for kgroup in all_kgroups[1:]:
+		current_run_id = kgroup.primary_run
+		current_run = pong.runs[current_run_id]
+		match = match_clusters(pong, reference_run.data, current_run.data, kgroup.K, dist_metric, True)
+		add_cluster_match(pong, reference_run_id, current_run_id, match)
+
+
 def is_disjoint(clique_list, num_runs):
 	total = sum([len(x) for x in clique_list])
 	if total == num_runs:
@@ -134,6 +154,11 @@ def multicluster_match(pong, dist_metric):
 	# for each K except K_max
 	for i in range(len(all_kgroups)-1):
 		run1 = all_kgroups[i].primary_run
+		# When using --plot-all-runs, multiple kgroups can have the same K.
+		# Skip matching if K values are the same, as this logic is for across-K matching.
+		if runs[run1].K == runs[all_kgroups[i+1].primary_run].K:
+			continue
+
 		run2 = all_kgroups[i+1].primary_run
 		match = match_clusters(pong, runs[run1].data, runs[run2].data, 
 			all_kgroups[i].K, dist_metric, False)
@@ -215,9 +240,3 @@ def add_cluster_match(pong, id1, id2, data):
 		pong.cluster_matches[id1][id2] = data
 	except KeyError:
 		pong.cluster_matches[id1] = {id2: data}
-
-
-
-
-
-

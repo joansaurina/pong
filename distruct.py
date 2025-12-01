@@ -77,6 +77,13 @@ def generate_color_perms(pong):
 	for k in range(1, len(pong.all_kgroups)):
 		kgroup = pong.all_kgroups[k]
 
+		# When using --plot-all-runs, multiple kgroups can have the same K.
+		# If K is the same, there's no splitting cluster. Just copy the color perm.
+		prev_kgroup = pong.all_kgroups[k-1]
+		if kgroup.K == prev_kgroup.K:
+			kgroup.color_perm = list(prev_kgroup.color_perm)
+			continue
+
 		# figure out which cluster splits in the prev K and which two
 		# clusters @ this K came from it
 		_, child_clusters = find_splitting_clusters(
@@ -115,16 +122,6 @@ def find_splitting_clusters(permk, permkp1):
 	
 	# find the indices containing cluster_which_splits
 	indices = [i for i, x in enumerate(tmp_permk) if x == cluster_which_splits]
-	
-	# may not want to include this error checking
-	try:
-		assert (len(indices) == 2) #there should be exactly 2 bc it's splitting into 2
-		assert (indices[1] == indices[0]+1) #the 2nd one should come right after the 1st
-	except AssertionError:
-  		print('An error occurred on line {} in an assertion statement. Please report this' 
-  			' problem by contacting the pong team.'.format(sys.exc_info().tb_lineno))
-  		exit(1)
-
 
 	# find the cluster nums at k+1 corresponding to these indices
 	child_clusters = [tmp_permkp1[i] for i in indices]
@@ -166,8 +163,3 @@ def print_distruct_perm_files(pong):
 				with open(path.join(permfiles_dir, name), 'w') as f:
 					for cluster, color in zip(pong.runs[run].alignment, colors):
 						f.write( '%d %s\n' % (cluster, color) )
-
-
-
-
-

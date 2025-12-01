@@ -135,6 +135,10 @@ def main():
     # *** NUEVO ARGUMENTO DPI AÑADIDO ***
     parser.add_argument('--dpi', type=int, default=200,
         help='Resolution (dots per inch) for PNG output. Default = 200')
+
+    parser.add_argument('--plot-all-runs', default=False, action='store_true',
+        help='Generate a separate plot for each input run, even if they '
+        'share the same K value. Disables consensus/representative run finding.')
     
     opts = parser.parse_args()
 
@@ -303,7 +307,7 @@ def main():
         print("NOTE: Fonts must be installed on the viewing system to render correctly.")
     
     # Llamar al generador, pasando el valor de DPI
-    generate_matplotlib_visualization(pongdata, output_viz_path, opts.dpi)
+    generate_matplotlib_visualization(pongdata, output_viz_path, opts.dpi, opts)
     
     # Restaurar el valor original
     plt.rcParams['svg.fonttype'] = original_svg_fonttype
@@ -388,7 +392,7 @@ def plot_admixture(ax, Q_mat_sorted, boundary_list, col_order=None, colors=None,
         ax.set_yticks([])
 
 
-def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
+def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts):
     """
     Generates the visualization with mixed-mode rendering support.
     """
@@ -505,8 +509,14 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value):
         )
         
         # K Label
-        ax.text(-0.07, 0.5, f"K={K}", transform=ax.transAxes, 
-                ha='right', va='center', fontweight='bold', fontsize=12)
+        if opts.plot_all_runs:
+            run_name = primary_run.name
+            ax.text(-0.07, 0.5, run_name, transform=ax.transAxes, 
+                    ha='right', va='center', fontweight='bold', fontsize=10)
+        else:
+            ax.text(-0.07, 0.5, f"K={K}", transform=ax.transAxes, 
+                    ha='right', va='center', fontweight='bold', fontsize=12)
+
         
         # --- Axis Cleanup ---
         ax.set_xlabel("") 
@@ -580,8 +590,15 @@ def run_pong(pongdata, opts, pong_filemap, labels, ind2pop):
 
     # MATCH CLUSTERS FOR RUNS WITHIN EACH K AND CONDENSE TO REPRESENTATIVE RUNS
     print('Matching clusters within each K and finding representative runs')
-    t1 = time.time()
-    cm.clump(pongdata, opts.dist_metric, opts.sim_threshold, opts.greedy)
+    t1 = time.time()    
+    if opts.plot_all_runs:
+        print('--plot-all-runs enabled, skipping representative run clumping.')
+        # Treat each run as its own primary run in its own kgroup
+        parse.treat_runs_as_individual_kgroups(pongdata)
+        # We still need to calculate matches against the first run for color alignment
+        cm.calculate_plot_all_matches(pongdata, opts.dist_metric)
+    else:
+        cm.clump(pongdata, opts.dist_metric, opts.sim_threshold, opts.greedy)
 
     # MATCH CLUSTERS ACROSS K
     print('Matching clusters across K')
