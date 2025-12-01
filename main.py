@@ -597,6 +597,9 @@ def run_pong(pongdata, opts, pong_filemap, labels, ind2pop):
         parse.treat_runs_as_individual_kgroups(pongdata)
         # We still need to calculate matches against the first run for color alignment
         cm.calculate_plot_all_matches(pongdata, opts.dist_metric)
+        # Set a default run to sort individuals by, since clumping is skipped
+        if pongdata.all_kgroups:
+            pongdata.sort_by = pongdata.all_kgroups[0].primary_run
     else:
         cm.clump(pongdata, opts.dist_metric, opts.sim_threshold, opts.greedy)
 

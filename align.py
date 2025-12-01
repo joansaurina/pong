@@ -29,26 +29,30 @@ def compute_alignments(pong, sim_thresh):
 
 	# ALIGN RUNS WITHIN EACH K
 	for kgroup in all_kgroups:
-		primary_alignment = [x+1 for x in range(kgroup.K)]
-		aligned_perms = [primary_alignment]
-		runs[kgroup.primary_run].rel_alignment = primary_alignment
-		
-		# When plotting all runs, we align each run to the very first run for consistency
-		is_plot_all_mode = pong.runs[kgroup.primary_run].id == kgroup.primary_run and len(kgroup.all_runs) == 1
-		
-		if is_plot_all_mode and kgroup != all_kgroups[0]:
+		is_plot_all_mode = pong.runs[kgroup.primary_run].represented_by == kgroup.primary_run
+
+		if is_plot_all_mode:
+			# In --plot-all-runs mode, align each run to the very first run for consistency.
 			reference_run_id = all_kgroups[0].primary_run
 			current_run_id = kgroup.primary_run
-			# Ensure the match was calculated. It should have been in cm.clump
-			if reference_run_id in pong.cluster_matches and current_run_id in pong.cluster_matches[reference_run_id]:
+			
+			if current_run_id == reference_run_id:
+				# The reference run is aligned to itself.
+				best_perm = [x + 1 for x in range(kgroup.K)]
+			else:
+				# Align other runs to the reference.
 				_, best_perm = get_best_perm(pong, reference_run_id, current_run_id, sim_thresh)
-				runs[current_run_id].rel_alignment = best_perm
-				aligned_perms = [best_perm]
-			else: # Fallback if match doesn't exist, though it should
-				runs[current_run_id].rel_alignment = primary_alignment
-				aligned_perms = [primary_alignment]
-		
-		kgroup.rel_alignment = np.array(aligned_perms)
+			
+			runs[current_run_id].rel_alignment = best_perm
+			kgroup.rel_alignment = np.array([best_perm])
+		else:
+			# Original logic for clumping mode (aligning within a mode).
+			primary_run_id = kgroup.primary_run
+			for run_id in kgroup.all_runs:
+				rep_id = runs[run_id].represented_by
+				_, best_perm = get_best_perm(pong, primary_run_id, rep_id, sim_thresh)
+				runs[run_id].rel_alignment = best_perm
+			kgroup.rel_alignment = np.array([runs[run_id].rel_alignment for run_id in kgroup.all_runs])
 
 		# PERMUTE THE ALIGNMENT
 		if len(all_kgroups)>1:
