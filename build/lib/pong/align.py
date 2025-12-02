@@ -5,7 +5,7 @@ from munkres import Munkres # this needs to be pip installed
 
 m = Munkres()
 
-def compute_alignments(pong, sim_thresh):
+def compute_alignments(pong, sim_thresh, opts):
 	runs, all_kgroups = pong.runs, pong.all_kgroups
 	'''
 	Alignment of runs within each K is relative to the perm in the alignment
@@ -29,9 +29,8 @@ def compute_alignments(pong, sim_thresh):
 
 	# ALIGN RUNS WITHIN EACH K
 	for kgroup in all_kgroups:
-		is_plot_all_mode = pong.runs[kgroup.primary_run].represented_by == kgroup.primary_run
 
-		if is_plot_all_mode:
+		if opts.plot_all_runs:
 			# In --plot-all-runs mode, align each run to the very first run for consistency.
 			reference_run_id = all_kgroups[0].primary_run
 			current_run_id = kgroup.primary_run
@@ -50,8 +49,12 @@ def compute_alignments(pong, sim_thresh):
 			primary_run_id = kgroup.primary_run
 			for run_id in kgroup.all_runs:
 				rep_id = runs[run_id].represented_by
-				_, best_perm = get_best_perm(pong, primary_run_id, rep_id, sim_thresh)
-				runs[run_id].rel_alignment = best_perm
+				if primary_run_id == rep_id:
+					# If the representative is the primary, alignment is identity
+					runs[run_id].rel_alignment = [x + 1 for x in range(runs[run_id].K)]
+				else:
+					_, best_perm = get_best_perm(pong, primary_run_id, rep_id, sim_thresh)
+					runs[run_id].rel_alignment = best_perm
 			kgroup.rel_alignment = np.array([runs[run_id].rel_alignment for run_id in kgroup.all_runs])
 
 		# PERMUTE THE ALIGNMENT

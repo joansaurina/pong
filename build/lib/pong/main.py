@@ -615,7 +615,7 @@ def run_pong(pongdata, opts, pong_filemap, labels, ind2pop):
     # COMPUTE BEST-GUESS ALIGNMENTS FOR ALL RUNS WITHIN AND ACROSS K
     print('Finding best alignment for all runs within and across K')
     t3 = time.time()
-    align.compute_alignments(pongdata, opts.sim_threshold)
+    align.compute_alignments(pongdata, opts.sim_threshold, opts)
     t4 = time.time()
 
     if pongdata.print_all:
