@@ -351,8 +351,8 @@ def treat_runs_as_individual_kgroups(pong):
 	each run and setting that run as the primary run of its group.
 	"""
 	new_kgroups = []
-	# Sort runs by K and then by name to ensure a consistent plotting order
-	sorted_runs = sorted(pong.runs.values(), key=lambda r: (r.K, r.name))
+	# Sort runs by K. Do not sort by name to preserve filemap order.
+	sorted_runs = sorted(pong.runs.values(), key=lambda r: r.K)
 
 	for run in sorted_runs:
 		# Create a new Kgroup just for this run

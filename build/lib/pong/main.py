@@ -129,10 +129,13 @@ def main():
         'choice of whether to continue with the greedy algorithm, or to '
         'exit and re-run with different parameters.')
     
-    parser.add_argument('--viz_format', default='png', choices=['png', 'svg'],
-        help='Output format for the visualization plot. Default = png')
-    
-    # *** NUEVO ARGUMENTO DPI AÑADIDO ***
+    parser.add_argument(
+        '--viz_format',
+        default='png',
+        choices=['png', 'svg', 'pdf'],
+        help='Output format for the visualization plot. Default = png'
+    )
+
     parser.add_argument('--dpi', type=int, default=200,
         help='Resolution (dots per inch) for PNG output. Default = 200')
 
@@ -305,6 +308,12 @@ def main():
         plt.rcParams['svg.fonttype'] = 'none'
         print("SVG text will be saved as editable text (not paths).")
         print("NOTE: Fonts must be installed on the viewing system to render correctly.")
+    
+    elif opts.viz_format == 'pdf':
+        # Ensure fonts are embedded as text, not paths
+        plt.rcParams['pdf.fonttype'] = 42  # TrueType
+        plt.rcParams['ps.fonttype'] = 42
+        print("PDF will be saved with editable TrueType fonts.")
     
     # Llamar al generador, pasando el valor de DPI
     generate_matplotlib_visualization(pongdata, output_viz_path, opts.dpi, opts)

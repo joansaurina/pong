@@ -22,7 +22,7 @@ def clump(pong, dist_metric, sim_threshold, greedy):
 		likewise need to add the one entry of unique_runs to rep_runs.
 	'''
 	for kgroup in pong.all_kgroups:
-		kgroup.all_runs = sorted(kgroup.all_runs)
+		# kgroup.all_runs = sorted(kgroup.all_runs)
 		all_runs = kgroup.all_runs
 		e = []
 		G = nx.Graph()
@@ -57,7 +57,7 @@ def clump(pong, dist_metric, sim_threshold, greedy):
 		G.add_weighted_edges_from(e)
 
 
-		cliques = sorted(list(nx.find_cliques(G)), key=lambda d : len(d), reverse=True)
+		cliques = sorted(list(nx.find_cliques(G)), key=lambda d : (len(d), -min([all_runs.index(x) for x in d])), reverse=True)
 		cliques = [sorted(x) for x in cliques]
 		if not is_disjoint(cliques, len(kgroup.all_runs)):
 			sys.stdout.write('\nWarning: pong could not find disjoint modes given similarity threshold.\n')
