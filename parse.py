@@ -175,7 +175,7 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 		pong.ind2pop = np.genfromtxt(p, unpack=True, delimiter=col_delim,
 			autostrip=True, usecols=(ind2pop-1,), dtype=str)
 	else:
-		pong.ind2pop = np.genfromtxt(ind2pop, unpack=True, autostrip=True, dtype=str)
+		pong.ind2pop = np.genfromtxt(ind2pop, dtype=str, delimiter="\n")
 		#check the length of ind2pop and then strip the unimportant features
 	if len(pong.ind2pop) != pong.num_indiv:
 		if len(pong.ind2pop) > 1:
@@ -342,11 +342,6 @@ def validate_run_id(runid):
 	
 	if not runid[0].isalpha():
 		sys.exit(error + runid + '. All runIDs must start with a letter (A-Z/a-z).')
-
-	for c in runid:
-		if not (c.isalpha() or c.isdigit() or c == '_' or c == '-'):
-			sys.exit(error + runid + '. All runIDs must contain only letters (A-Z/a-z), '
-				'numbers (0-9), underscores (_) and hyphens (-).')
 
 
 def treat_runs_as_individual_kgroups(pong):
