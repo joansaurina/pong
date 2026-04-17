@@ -1,4 +1,4 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: pong
 Version: 1.5
 Summary: pong: fast visualization and analysis of population structure
@@ -19,6 +19,14 @@ Description-Content-Type: text/markdown
 Requires-Dist: numpy<3.0,>=1.19
 Requires-Dist: munkres>=1.1
 Requires-Dist: networkx>=2.5
+Dynamic: author
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 _This document serves as a quick-start guide and reference card for installing and using pong. Please refer to the [software manual](https://github.com/ramachandran-lab/pong/blob/master/pong-manual.pdf) for comprehensive information._
 

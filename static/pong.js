@@ -53,11 +53,23 @@ var area = d3.area()
 var colors = ["#E04B4B", "#6094C3", "#63BC6A", "#A76BB2", "#F0934E",
 	"#FEFB54", "#B37855", "#EF91CA", "#A4A4A4"];
 
-var colors_26 = ["#f0a3ff", "#0075dc", "#993f00", "#4c005c", "#191919", 
+var colors_100 = ["#f0a3ff", "#0075dc", "#993f00", "#4c005c", "#191919", 
 	"#005c31", "#2bce48", "#ffcc99", "#808080", "#94ffb5", "#8f7c00", 
 	"#9dcc00", "#c20088", "#003380", "#ffa405", "#ffa8bb", "#426600", 
 	"#ff0010", "#5ef1f2", "#00998f", "#e0ff66", "#740aff", "#990000", 
-	"#ffff80", "#ffff00", "#ff5005"];
+	"#ffff80", "#ffff00", "#ff5005", "#000000", "#FFFF00", "#1CE6FF", 
+	"#FF34FF", "#FF4A46", "#008941", "#006FA6", "#A30059", "#FFDBE5", 
+	"#7A4900", "#0000A6", "#63FFAC", "#B79762", "#004D43", "#8FB0FF", 
+	"#997D87", "#5A0007", "#809693", "#FEFFE6", "#1B4400", "#4FC601", 
+	"#3B5DFF", "#4A3B53", "#FF2F80", "#61615A", "#BA0900", "#6B7900", 
+	"#00C2A0", "#FFAA92", "#FF90C9", "#B903AA", "#D16100", "#DDEFFF", 
+	"#000035", "#7B4F4B", "#A1C299", "#300018", "#0AA6D8", "#013349", 
+	"#00846F", "#372101", "#FFB500", "#C2FFED", "#A079BF", "#CC0744", 
+	"#C0B9B2", "#C2FF99", "#001E09", "#00489C", "#6F0062", "#0CBD66", 
+	"#EEC3FF", "#456D75", "#B77B68", "#7A87A1", "#788D66", "#885578", 
+	"#FAD09F", "#FF8A9A", "#D157A0", "#BEC459", "#456648", "#0086ED", 
+	"#886F4C", "#34362D", "#B4A8BD", "#00A6AA", "#452C2C", "#636375", 
+	"#A3C8C9", "#FF913F", "#938A81", "#575329", "#00FECF", "#B05B6F"];
 
 var queue = 0; // number of plots queued
 var json;
@@ -119,7 +131,7 @@ socket.onmessage = function(e) {
 		}
 		
 		if (json.colors.length > 0) colors = json.colors;
-		else if (json.K_max > 9) colors = colors_26;
+		else if (json.K_max > 9) colors = colors_100;
 		all_svg = new Array();
 
 		for (i = 0; i < json.qmatrices.length; i++) {

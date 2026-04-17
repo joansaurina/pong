@@ -76,15 +76,15 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 		sys.exit('Error: Q matrix with K=%d encountered in filemap, which is not supported by pong. '
 			'Make sure all input files have K greater than or equal to 1.' % pong.K_min)
 
-	if pong.K_max > 26 and not pong.colors:
-		sys.exit('Pong does not support values of K greater than 26 by default. '
+	if pong.K_max > 100 and not pong.colors:
+		sys.exit('Pong does not support values of K greater than 100 by default. '
 			'Please provide a custom color file with as many colors as the largest '
 			'value of K from the Q matrices.')
 
 	if pong.colors and pong.K_max > len(pong.colors):
 		sys.stdout.write('\nWarning: The custom color file provided does not contain enough colors '
 			'for visualization. ')
-		if pong.K_max < 27:
+		if pong.K_max < 101:
 			r = input('Continue using default colors? (y/n): ')
 			while r not in ('y', 'Y', 'n', 'N'):
 				r = input('Please enter "y" to overwrite or '
