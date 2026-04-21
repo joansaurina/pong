@@ -595,21 +595,35 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
                 ax.tick_params(axis='x', which='both', length=0, pad=5)
                 
                 if i2_labels_list:
-                    # Create a secondary x-axis for i2 groupings
-                    ax2 = ax.twiny()
-                    ax2.set_xlim(ax.get_xlim())
-                    ax2.set_xticks([ (item['start'] + item['end'])/2 for item in i2_labels_list ])
-                    ax2.set_xticklabels([item['name'] for item in i2_labels_list], fontsize=10, fontweight='bold')
-                    ax2.tick_params(axis='x', which='both', length=0, pad=2)
-                    ax2.spines['top'].set_visible(False)
-                    ax2.spines['right'].set_visible(False)
-                    ax2.spines['bottom'].set_visible(False)
-                    ax2.spines['left'].set_visible(False)
+                    # Draw "cajitas" (elegant brackets) for i2 groupings
+                    trans = ax.get_xaxis_transform()
                     
-                    # Move ax2 to the bottom, below the original x-axis
-                    ax2.xaxis.set_ticks_position('bottom')
-                    ax2.xaxis.set_label_position('bottom')
-                    ax2.spines['bottom'].set_position(('outward', 40))
+                    # y_bracket relative to the axes height: negative values move it below the x-axis
+                    # Since i1 labels are rotated 90 deg, we push i2 brackets further down
+                    y_bracket = -0.55
+                    y_text = y_bracket - 0.03
+                    
+                    for item in i2_labels_list:
+                        x0 = item['start']
+                        x1 = item['end']
+                        
+                        # Add slight gap between adjacent brackets so they don't touch
+                        gap = (x1 - x0) * 0.01
+                        # Make sure gap isn't too large for small populations
+                        gap = min(gap, 10) 
+                        x0_br = x0 + gap if (x0 + gap) < x1 else x0
+                        x1_br = x1 - gap if (x1 - gap) > x0 else x1
+                        
+                        # Draw horizontal line
+                        ax.plot([x0_br, x1_br], [y_bracket, y_bracket], color='#222222', lw=1.5, transform=trans, clip_on=False)
+                        
+                        # Draw vertical ticks (the tips of the bracket extending upwards towards the plot)
+                        ax.plot([x0_br, x0_br], [y_bracket, y_bracket + 0.08], color='#222222', lw=1.5, transform=trans, clip_on=False)
+                        ax.plot([x1_br, x1_br], [y_bracket, y_bracket + 0.08], color='#222222', lw=1.5, transform=trans, clip_on=False)
+                        
+                        # Add the text label directly below the center of the bracket
+                        ax.text((x0+x1)/2, y_text, item['name'], ha='center', va='top', 
+                                fontsize=11, fontweight='bold', color='#222222', transform=trans, clip_on=False)
             else:
                 ax.set_xticks([])
                 ax.set_xlabel("Samples")
@@ -621,7 +635,8 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
         plt.close(fig)
         return
 
-    plt.subplots_adjust(bottom=0.25, hspace=0.3)
+    bottom_margin = 0.55 if hasattr(pongdata, 'pop2i2') and pongdata.pop2i2 else 0.3
+    plt.subplots_adjust(bottom=bottom_margin, hspace=0.3)
 
     output_path = path.abspath(output_filename)
     try:
