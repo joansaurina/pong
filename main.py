@@ -617,16 +617,16 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
                         x0_br = x0 + gap if (x0 + gap) < x1 else x0
                         x1_br = x1 - gap if (x1 - gap) > x0 else x1
                         
-                        # Draw horizontal line
-                        ax.plot([x0_br, x1_br], [y_bracket, y_bracket], color='#222222', lw=1.5, transform=trans, clip_on=False)
+                        # Draw horizontal line (thinner, without bold effect)
+                        ax.plot([x0_br, x1_br], [y_bracket, y_bracket], color='#222222', lw=0.8, transform=trans, clip_on=False)
                         
-                        # Draw vertical ticks (the tips of the bracket extending upwards towards the plot)
-                        ax.plot([x0_br, x0_br], [y_bracket, y_bracket + 0.08], color='#222222', lw=1.5, transform=trans, clip_on=False)
-                        ax.plot([x1_br, x1_br], [y_bracket, y_bracket + 0.08], color='#222222', lw=1.5, transform=trans, clip_on=False)
+                        # Draw vertical ticks
+                        ax.plot([x0_br, x0_br], [y_bracket, y_bracket + 0.08], color='#222222', lw=0.8, transform=trans, clip_on=False)
+                        ax.plot([x1_br, x1_br], [y_bracket, y_bracket + 0.08], color='#222222', lw=0.8, transform=trans, clip_on=False)
                         
-                        # Add the text label directly below the center of the bracket
-                        ax.text((x0+x1)/2, y_text, item['name'], ha='center', va='top', 
-                                fontsize=11, fontweight='bold', color='#222222', transform=trans, clip_on=False)
+                        # Add the text label directly below the center of the bracket, matching i1 labels orientation and font
+                        ax.text((x0+x1)/2, y_text, item['name'], ha='center', va='top', rotation=90,
+                                fontsize=8, color='#222222', transform=trans, clip_on=False)
             else:
                 ax.set_xticks([])
                 ax.set_xlabel("Samples")
