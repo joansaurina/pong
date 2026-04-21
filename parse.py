@@ -10,7 +10,7 @@ import warnings
 
 
 
-def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file, ind2pop):
+def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file, ind2pop, ind2pop2=None):
 	error = '\nError parsing input file: could not convert Q matrix data '
 	error += 'entry to float.\nPerhaps the value of `--ignore_columns` '
 	error += 'is incorrect or a file with a different format was included '
@@ -148,6 +148,7 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 	pong.num_indiv = n.pop()
 
 
+	pong.pop2i2 = None
 	if not ind2pop: return
 	# ================= PARSE METADATA / POP INFO ========================
 	'''
@@ -182,8 +183,38 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 			sys.exit('error: individual population file assignment contains more than 1 column of data')
 		sys.exit('error - Inconsistent number of individuals found across dataset.'
 			' Check that all Q matrices and ind2pop data have the same number of rows.')
-	
-	if not labels_file:
+
+	if ind2pop2 is not None:
+		if isinstance(ind2pop2, int):
+			pong.ind2pop2 = np.genfromtxt(p, unpack=True, delimiter=col_delim,
+				autostrip=True, usecols=(ind2pop2-1,), dtype=str)
+		else:
+			pong.ind2pop2 = np.genfromtxt(ind2pop2, dtype=str, delimiter="\n")
+		
+		# Create combined ind2pop
+		pong.combined_ind2pop = np.array([f"{i2}__{i1}" for i2, i1 in zip(pong.ind2pop2, pong.ind2pop)])
+		
+		if not labels_file:
+			i2_first = {}; combined_first = {}
+			for idx, val in enumerate(pong.ind2pop2):
+				if val not in i2_first: i2_first[val] = idx
+			for idx, val in enumerate(pong.combined_ind2pop):
+				if val not in combined_first: combined_first[val] = idx
+			
+			pops = set(pong.combined_ind2pop)
+			pairs = []
+			for p in pops:
+				i2, i1 = p.split("__", 1)
+				pairs.append((i2_first[i2], combined_first[p], p, i1, i2))
+			pairs.sort()
+			pong.pop_order = [p for _, _, p, _, _ in pairs]
+			pong.popcode2popname = {p: i1 for _, _, p, i1, _ in pairs}
+			pong.pop2i2 = {p: i2 for _, _, p, _, i2 in pairs}
+		else:
+			pass
+		pong.ind2pop = pong.combined_ind2pop
+
+	if not labels_file and ind2pop2 is None:
 		pops = set(pong.ind2pop)
 		pairs = []
 		for p in pops:
@@ -195,7 +226,7 @@ def parse_multicluster_input(pong, filemap, ignore_cols, col_delim, labels_file,
 		pong.pop_order = [p for _, p in pairs]
 		pong.popcode2popname = {p: p for p in pops}
 
-	else:
+	elif ind2pop2 is None:
 		labels = np.genfromtxt(labels_file, delimiter='\t', autostrip=True, 
 			dtype=str, unpack=True)
 

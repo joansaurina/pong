@@ -99,6 +99,8 @@ def main():
     parser.add_argument('-i', '--ind2pop', default=None,
         help='ind2pop data (can be either a Q-matrix column number or the ' 
         'path to a file containing the data).')
+    parser.add_argument('-i2', '--ind2pop2', default=None,
+        help='ind2pop2 data (higher level grouping).')
     parser.add_argument('-n', '--pop_names', default=None,
         help='Path to file containing population order/names.')
     parser.add_argument('-l', '--color_list',
@@ -203,6 +205,14 @@ def main():
             if not path.isfile(ind2pop):
                 sys.exit('Error: Could not find ind2pop file at %s.' % ind2pop)
     
+    ind2pop2 = None
+    if opts.ind2pop2 is not None:
+        try:
+            ind2pop2 = int(opts.ind2pop2)
+        except ValueError:
+            ind2pop2 = path.abspath(opts.ind2pop2)
+            if not path.isfile(ind2pop2):
+                sys.exit('Error: Could not find ind2pop2 file at %s.' % ind2pop2)
 
     if opts.pop_names is not None:
         if ind2pop is None:
@@ -282,7 +292,7 @@ def main():
 
 
     global run_pong_args
-    run_pong_args = (pongdata, opts, pong_filemap, labels, ind2pop)
+    run_pong_args = (pongdata, opts, pong_filemap, labels, ind2pop, ind2pop2)
 
 
     # ========================= RUN PONG ======================================
@@ -330,7 +340,7 @@ def main():
 # =============================================================================
 def plot_admixture(ax, Q_mat_sorted, boundary_list, col_order=None, colors=None, 
                    show_boundaries=True, show_axes_labels=True, show_ticks=True, 
-                   set_limits=True):
+                   set_limits=True, major_boundary_list=None):
     """
     Optimized plotting using Rasterization for Biobank-scale data.
     Instead of drawing millions of vector bars, this 'paints' the data as a 
@@ -385,7 +395,13 @@ def plot_admixture(ax, Q_mat_sorted, boundary_list, col_order=None, colors=None,
         rasterize_boundaries = len(boundary_list) > 1000
         
         for boundary in boundary_list:
-            ax.axvline(boundary, color='black', ls='--', lw=0.5, 
+            lw = 0.5
+            ls = '--'
+            color = 'black'
+            if major_boundary_list and boundary in major_boundary_list:
+                lw = 1.2
+                ls = '-'
+            ax.axvline(boundary, color=color, ls=ls, lw=lw, 
                        rasterized=rasterize_boundaries)
 
     if set_limits:
@@ -456,6 +472,7 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
     valid_plots = 0
     pop_labels_list = []
     pop_boundary_list = [] 
+    i2_labels_list = []
     
     for i, kgroup in enumerate(all_kgroups):
         K = kgroup.K
@@ -484,6 +501,7 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
             if capture_labels:
                 real_name = "Pop"
                 p_idx = pop.get('population_index')
+                pop_code = None
                 if p_idx is not None and pongdata.pop_order and p_idx < len(pongdata.pop_order):
                     pop_code = pongdata.pop_order[p_idx]
                     if pongdata.popcode2popname and pop_code in pongdata.popcode2popname:
@@ -493,6 +511,13 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
                 else:
                     real_name = pop.get('name', f"Pop {p_idx}")
                 pop_labels_list.append(real_name)
+                
+                if hasattr(pongdata, 'pop2i2') and pongdata.pop2i2 and pop_code in pongdata.pop2i2:
+                    i2_name = pongdata.pop2i2[pop_code]
+                    if len(i2_labels_list) == 0 or i2_labels_list[-1]['name'] != i2_name:
+                        i2_labels_list.append({'name': i2_name, 'start': current_idx, 'end': current_idx + len(pop_members)})
+                    else:
+                        i2_labels_list[-1]['end'] += len(pop_members)
 
             if current_idx > 0:
                 boundary_list.append(current_idx)
@@ -516,6 +541,7 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
         if capture_labels:
             pop_boundary_list = boundary_list
 
+        major_boundaries = [item['start'] for item in i2_labels_list if item['start'] > 0] if i2_labels_list else None
         # --- PLOT CALL ---
         plot_admixture(
             ax=ax,
@@ -526,7 +552,8 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
             show_boundaries=True,
             show_axes_labels=True, 
             show_ticks=True,
-            set_limits=True
+            set_limits=True,
+            major_boundary_list=major_boundaries
         )
         
         # K Label
@@ -560,14 +587,29 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
                     end_b = full_boundaries[j+1]
                     mid = (start_b + end_b) / 2
                     
-                    # Only label if population segment is large enough to read
-                    if (end_b - start_b) > (n_samples * 0.005): 
-                        tick_positions.append(mid)
-                        tick_labels.append(str(pop_labels_list[j]).upper())
+                    tick_positions.append(mid)
+                    tick_labels.append(str(pop_labels_list[j]).upper())
 
                 ax.set_xticks(tick_positions)
                 ax.set_xticklabels(tick_labels, rotation=90, ha='center', fontsize=8)
                 ax.tick_params(axis='x', which='both', length=0, pad=5)
+                
+                if i2_labels_list:
+                    # Create a secondary x-axis for i2 groupings
+                    ax2 = ax.twiny()
+                    ax2.set_xlim(ax.get_xlim())
+                    ax2.set_xticks([ (item['start'] + item['end'])/2 for item in i2_labels_list ])
+                    ax2.set_xticklabels([item['name'] for item in i2_labels_list], fontsize=10, fontweight='bold')
+                    ax2.tick_params(axis='x', which='both', length=0, pad=2)
+                    ax2.spines['top'].set_visible(False)
+                    ax2.spines['right'].set_visible(False)
+                    ax2.spines['bottom'].set_visible(False)
+                    ax2.spines['left'].set_visible(False)
+                    
+                    # Move ax2 to the bottom, below the original x-axis
+                    ax2.xaxis.set_ticks_position('bottom')
+                    ax2.xaxis.set_label_position('bottom')
+                    ax2.spines['bottom'].set_position(('outward', 40))
             else:
                 ax.set_xticks([])
                 ax.set_xlabel("Samples")
@@ -599,14 +641,14 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
 # =============================================================================
 
 
-def run_pong(pongdata, opts, pong_filemap, labels, ind2pop):
+def run_pong(pongdata, opts, pong_filemap, labels, ind2pop, ind2pop2=None):
     pongdata.status = 1
 
     t0=time.time()
     # PARSE INPUT FILE AND ORGANIZE DATA INTO GROUPS OF RUNS PER K
     print('Parsing input and generating cluster network graph')
     parse.parse_multicluster_input(pongdata, pong_filemap, opts.ignore_cols, 
-        opts.col_delim, labels, ind2pop)
+        opts.col_delim, labels, ind2pop, ind2pop2)
 
 
     # MATCH CLUSTERS FOR RUNS WITHIN EACH K AND CONDENSE TO REPRESENTATIVE RUNS
