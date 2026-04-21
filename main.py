@@ -101,6 +101,8 @@ def main():
         'path to a file containing the data).')
     parser.add_argument('-i2', '--ind2pop2', default=None,
         help='ind2pop2 data (higher level grouping).')
+    parser.add_argument('-i3', '--ind2pop3', default=None,
+        help='ind2pop3 data (highest level grouping).')
     parser.add_argument('-n', '--pop_names', default=None,
         help='Path to file containing population order/names.')
     parser.add_argument('-l', '--color_list',
@@ -214,6 +216,15 @@ def main():
             if not path.isfile(ind2pop2):
                 sys.exit('Error: Could not find ind2pop2 file at %s.' % ind2pop2)
 
+    ind2pop3 = None
+    if opts.ind2pop3 is not None:
+        try:
+            ind2pop3 = int(opts.ind2pop3)
+        except ValueError:
+            ind2pop3 = path.abspath(opts.ind2pop3)
+            if not path.isfile(ind2pop3):
+                sys.exit('Error: Could not find ind2pop3 file at %s.' % ind2pop3)
+
     if opts.pop_names is not None:
         if ind2pop is None:
             sys.exit('Error: must provide ind to pop data in order to provide '
@@ -292,7 +303,7 @@ def main():
 
 
     global run_pong_args
-    run_pong_args = (pongdata, opts, pong_filemap, labels, ind2pop, ind2pop2)
+    run_pong_args = (pongdata, opts, pong_filemap, labels, ind2pop, ind2pop2, ind2pop3)
 
 
     # ========================= RUN PONG ======================================
@@ -473,6 +484,7 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
     pop_labels_list = []
     pop_boundary_list = [] 
     i2_labels_list = []
+    i3_labels_list = []
     
     for i, kgroup in enumerate(all_kgroups):
         K = kgroup.K
@@ -518,6 +530,13 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
                         i2_labels_list.append({'name': i2_name, 'start': current_idx, 'end': current_idx + len(pop_members)})
                     else:
                         i2_labels_list[-1]['end'] += len(pop_members)
+
+                if hasattr(pongdata, 'pop2i3') and pongdata.pop2i3 and pop_code in pongdata.pop2i3:
+                    i3_name = pongdata.pop2i3[pop_code]
+                    if len(i3_labels_list) == 0 or i3_labels_list[-1]['name'] != i3_name:
+                        i3_labels_list.append({'name': i3_name, 'start': current_idx, 'end': current_idx + len(pop_members)})
+                    else:
+                        i3_labels_list[-1]['end'] += len(pop_members)
 
             if current_idx > 0:
                 boundary_list.append(current_idx)
@@ -627,6 +646,32 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
                         # Add the text label directly below the center of the bracket, matching i1 labels orientation and font
                         ax.text((x0+x1)/2, y_text, item['name'], ha='center', va='top', rotation=90,
                                 fontsize=8, color='#222222', transform=trans, clip_on=False)
+                
+                if i3_labels_list:
+                    trans = ax.get_xaxis_transform()
+                    
+                    # Calculate dynamic y_bracket based on the longest i1 and i2 label lengths
+                    max_label_len = max([len(str(lbl)) for lbl in pop_labels_list]) if pop_labels_list else 10
+                    max_i2_label_len = max([len(str(item['name'])) for item in i2_labels_list]) if i2_labels_list else 10
+                    
+                    y_bracket_i3 = -0.3 - (max_label_len * 0.15) - 0.15 - (max_i2_label_len * 0.15)
+                    y_text_i3 = y_bracket_i3 - 0.05
+                    
+                    for item in i3_labels_list:
+                        x0 = item['start']
+                        x1 = item['end']
+                        
+                        gap = (x1 - x0) * 0.01
+                        gap = min(gap, 10) 
+                        x0_br = x0 + gap if (x0 + gap) < x1 else x0
+                        x1_br = x1 - gap if (x1 - gap) > x0 else x1
+                        
+                        ax.plot([x0_br, x1_br], [y_bracket_i3, y_bracket_i3], color='#222222', lw=0.8, transform=trans, clip_on=False)
+                        ax.plot([x0_br, x0_br], [y_bracket_i3, y_bracket_i3 + 0.08], color='#222222', lw=0.8, transform=trans, clip_on=False)
+                        ax.plot([x1_br, x1_br], [y_bracket_i3, y_bracket_i3 + 0.08], color='#222222', lw=0.8, transform=trans, clip_on=False)
+                        
+                        ax.text((x0+x1)/2, y_text_i3, item['name'], ha='center', va='top', rotation=90,
+                                fontsize=8, color='#222222', transform=trans, clip_on=False)
             else:
                 ax.set_xticks([])
                 ax.set_xlabel("Samples")
@@ -638,7 +683,11 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
         plt.close(fig)
         return
 
-    bottom_margin = 0.55 if hasattr(pongdata, 'pop2i2') and pongdata.pop2i2 else 0.3
+    bottom_margin = 0.3
+    if hasattr(pongdata, 'pop2i3') and pongdata.pop2i3:
+        bottom_margin = 0.8
+    elif hasattr(pongdata, 'pop2i2') and pongdata.pop2i2:
+        bottom_margin = 0.55
     plt.subplots_adjust(bottom=bottom_margin, hspace=0.3)
 
     output_path = path.abspath(output_filename)
@@ -659,14 +708,14 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
 # =============================================================================
 
 
-def run_pong(pongdata, opts, pong_filemap, labels, ind2pop, ind2pop2=None):
+def run_pong(pongdata, opts, pong_filemap, labels, ind2pop, ind2pop2=None, ind2pop3=None):
     pongdata.status = 1
 
     t0=time.time()
     # PARSE INPUT FILE AND ORGANIZE DATA INTO GROUPS OF RUNS PER K
     print('Parsing input and generating cluster network graph')
     parse.parse_multicluster_input(pongdata, pong_filemap, opts.ignore_cols, 
-        opts.col_delim, labels, ind2pop, ind2pop2)
+        opts.col_delim, labels, ind2pop, ind2pop2, ind2pop3)
 
 
     # MATCH CLUSTERS FOR RUNS WITHIN EACH K AND CONDENSE TO REPRESENTATIVE RUNS
