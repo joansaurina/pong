@@ -598,10 +598,13 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
                     # Draw "cajitas" (elegant brackets) for i2 groupings
                     trans = ax.get_xaxis_transform()
                     
-                    # y_bracket relative to the axes height: negative values move it below the x-axis
-                    # Since i1 labels are rotated 90 deg, we push i2 brackets further down
-                    y_bracket = -0.55
-                    y_text = y_bracket - 0.03
+                    # Calculate dynamic y_bracket based on the longest i1 label length
+                    max_label_len = max([len(str(lbl)) for lbl in pop_labels_list]) if pop_labels_list else 10
+                    
+                    # For long names like full country names, we must push the bracket significantly down.
+                    # Each character takes roughly ~0.08 of axes height in this specific aspect ratio
+                    y_bracket = -0.1 - (max_label_len * 0.08)
+                    y_text = y_bracket - 0.05
                     
                     for item in i2_labels_list:
                         x0 = item['start']
