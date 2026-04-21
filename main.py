@@ -472,10 +472,16 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
     
     # Calculate height: give smaller height per plot for massive datasets 
     # to keep aspect ratio manageable
+    fig_height = 2.5 * num_plots
+    if hasattr(pongdata, 'pop2i3') and pongdata.pop2i3:
+        fig_height = 3.5 * num_plots
+    elif hasattr(pongdata, 'pop2i2') and pongdata.pop2i2:
+        fig_height = 3.0 * num_plots
+
     fig, axs = plt.subplots(
         nrows=num_plots, 
         ncols=1, 
-        figsize=(15, 2.5 * num_plots), 
+        figsize=(15, fig_height), 
         squeeze=False 
     )
     axs = axs.flatten()
@@ -560,7 +566,12 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
         if capture_labels:
             pop_boundary_list = boundary_list
 
-        major_boundaries = [item['start'] for item in i2_labels_list if item['start'] > 0] if i2_labels_list else None
+        major_boundaries = None
+        if i3_labels_list:
+            major_boundaries = [item['start'] for item in i3_labels_list if item['start'] > 0]
+        elif i2_labels_list:
+            major_boundaries = [item['start'] for item in i2_labels_list if item['start'] > 0]
+            
         # --- PLOT CALL ---
         plot_admixture(
             ax=ax,
@@ -685,7 +696,7 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
 
     bottom_margin = 0.3
     if hasattr(pongdata, 'pop2i3') and pongdata.pop2i3:
-        bottom_margin = 0.8
+        bottom_margin = 0.65
     elif hasattr(pongdata, 'pop2i2') and pongdata.pop2i2:
         bottom_margin = 0.55
     plt.subplots_adjust(bottom=bottom_margin, hspace=0.3)
