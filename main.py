@@ -614,10 +614,10 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
                     mid = (start_b + end_b) / 2
                     
                     tick_positions.append(mid)
-                    tick_labels.append(str(pop_labels_list[j]).upper())
+                    tick_labels.append(str(pop_labels_list[j]).title())
 
                 ax.set_xticks(tick_positions)
-                ax.set_xticklabels(tick_labels, rotation=90, ha='center', fontsize=8)
+                ax.set_xticklabels(tick_labels, rotation=90, ha='center', fontsize=6)
                 ax.tick_params(axis='x', which='both', length=0, pad=5)
                 
                 if i2_labels_list:
@@ -651,8 +651,8 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
                         ax.plot([x1_br, x1_br], [y_bracket, y_bracket + 0.08], color='#222222', lw=0.8, transform=trans, clip_on=False)
                         
                         # Add the text label directly below the center of the bracket, matching i1 labels orientation and font
-                        ax.text((x0+x1)/2, y_text, item['name'], ha='center', va='top', rotation=90,
-                                fontsize=8, color='#222222', transform=trans, clip_on=False)
+                        ax.text((x0+x1)/2, y_text, str(item['name']).title(), ha='center', va='top', rotation=90,
+                                fontsize=6, color='#222222', transform=trans, clip_on=False)
                 
                 if i3_labels_list:
                     trans = ax.get_xaxis_transform()
@@ -677,8 +677,8 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
                         ax.plot([x0_br, x0_br], [y_bracket_i3, y_bracket_i3 + 0.08], color='#222222', lw=0.8, transform=trans, clip_on=False)
                         ax.plot([x1_br, x1_br], [y_bracket_i3, y_bracket_i3 + 0.08], color='#222222', lw=0.8, transform=trans, clip_on=False)
                         
-                        ax.text((x0+x1)/2, y_text_i3, item['name'], ha='center', va='top', rotation=90,
-                                fontsize=8, color='#222222', transform=trans, clip_on=False)
+                        ax.text((x0+x1)/2, y_text_i3, str(item['name']).title(), ha='center', va='top', rotation=90,
+                                fontsize=6, color='#222222', transform=trans, clip_on=False)
             else:
                 ax.set_xticks([])
                 ax.set_xlabel("Samples")
