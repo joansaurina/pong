@@ -567,10 +567,6 @@ def generate_matplotlib_visualization(pongdata, output_filename, dpi_value, opts
             pop_boundary_list = boundary_list
 
         major_boundaries = None
-        if i3_labels_list:
-            major_boundaries = [item['start'] for item in i3_labels_list if item['start'] > 0]
-        elif i2_labels_list:
-            major_boundaries = [item['start'] for item in i2_labels_list if item['start'] > 0]
             
         # --- PLOT CALL ---
         plot_admixture(
